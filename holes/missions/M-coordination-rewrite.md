@@ -608,6 +608,59 @@ When the gate pipeline lands (Part II), these queries become the test suite.
 The search layer IS the validation layer — human-facing and machine-facing
 queries through the same interface.
 
+### Query Substrate: core.logic
+
+The query layer is built on `core.logic` (miniKanren). Each store is exposed
+as a set of relations; queries unify across stores through logic variables.
+
+```clojure
+;; Relations backed by different stores
+(defrel entity e)          ;; futon1a/XTDB
+(defrel session s)         ;; futon1a/XTDB
+(defrel arrow a)           ;; futon3a/SQLite
+(defrel pattern p)         ;; library/*.flexiarg (parsed, cached)
+(defrel transcript t)      ;; ~/.claude/projects/*.jsonl (indexed)
+(defrel agent ag)          ;; registry config
+```
+
+Queries unify across stores naturally:
+
+```clojure
+;; "Sessions with PARs where both Claude and Codex participated"
+(run* [s]
+  (session s)
+  (fresh [par]
+    (par-for-session par s)
+    (par-participant par :claude)
+    (par-participant par :codex)))
+```
+
+### Flexiformal Interpretation of Patterns
+
+Coordination patterns written in flexiarg (IF/HOWEVER/THEN/BECAUSE) can be
+partially interpreted as core.logic relations. This is the flexiformal
+pathway — the route from informal prose to formal gate check, with query
+as the middle ground.
+
+Three readings of each pattern:
+
+| Level | Reading | Example (`mandatory-psr`) |
+|-------|---------|--------------------------|
+| Informal | Prose | "Every task must carry a PSR before execution" |
+| Flexiformal | core.logic query | `(run* [t] (task t) (nafc psr-for-task _ t))` → violations |
+| Formal | Compiled gate | G3 rejects if no PSR (Part II) |
+
+The IF/THEN maps to a logic rule. The HOWEVER captures subtlety that remains
+prose (the case the rule must handle despite counterevidence). The BECAUSE is
+queryable provenance ("why does this rule exist?"). The Baldwin cycle maps
+onto this progression: EXPLORE (informal) → ASSIMILATE (flexiformal query) →
+CANALIZE (compiled gate check).
+
+Not every pattern reaches full formality. Some stay flexiformal — the HOWEVER
+clause genuinely captures something the system can't formalize. But the
+pathway exists, and each step adds machine-checkability without losing
+human readability.
+
 ### Prototype 0 Exit Conditions
 
 1. **Full-text search across XTDB** — query lab sessions, entities, and
@@ -615,18 +668,22 @@ queries through the same interface.
    returns results.
 2. **Session transcript search** — index `~/.claude/projects/` JSONL files
    and return matches with file + line attribution.
-3. **Notions extension** — `futon.notions` search scope expanded beyond
-   patterns to include session content and XTDB entities.
-4. **Federated results** — a single query returns results from multiple
-   stores with source attribution.
-5. **At least one query-as-test example** — a gate invariant expressed as
-   a query and evaluated against real data (even if the data is from
-   futon3's existing PSR/PUR files, not yet from a running gate pipeline).
+3. **Federated relational query** — a single core.logic query returns
+   results from multiple stores with source attribution. At minimum: XTDB +
+   session transcripts in one query.
+4. **Human-scale queries work** — "How many sessions are open?", "Which
+   Codex sessions did I run yesterday?", "Which sessions have PARs with
+   both Claude and Codex?" all return correct answers.
+5. **At least one pattern-as-query** — a coordination pattern (e.g.
+   `mandatory-psr`) partially interpreted as a core.logic relation and
+   evaluated against real data from futon3's existing PSR/PUR files.
+   This demonstrates that flexiformality is a pathway, not just a label.
 
 ### Scope Out (Prototype 0)
 
 - Write path (no mutations — search is read-only).
 - Gate pipeline (that's Part II).
+- Full interpretation of all 12 patterns (one working example is enough).
 - Embedding re-indexing (use existing MiniLM embeddings; new content gets
   keyword search only until re-indexed).
 - Production HTTP endpoint (REPL-first; HTTP can come in Prototype 1).
