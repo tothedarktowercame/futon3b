@@ -12,8 +12,8 @@
 
    This namespace is the LOGIC leg."
   (:require [clojure.core.logic :as l]
-            [clojure.string :as str]
             [clojure.java.io :as io]
+            [clojure.string :as str]
             [futon3b.query.transcript :as transcript]))
 
 ;;; ============================================================
@@ -21,73 +21,172 @@
 ;;; ============================================================
 
 (def ^:private default-library-roots
-  "Pattern library roots, searched in order. Configurable via
-   FUTON_LIBRARY_ROOTS env var (colon-separated paths)."
-  (if-let [env (System/getenv "FUTON_LIBRARY_ROOTS")]
-    (str/split env #":")
-    [(str (System/getProperty "user.home") "/code/futon3b/library")
-     (str (System/getProperty "user.home") "/code/futon3/library")]))
+  [(str (System/getProperty "user.home") "/code/futon3b/library")
+   (str (System/getProperty "user.home") "/code/futon3/library")])
+
+(defn library-roots
+  "Pattern library roots, searched in order.
+
+  Override with FUTON_LIBRARY_ROOTS env var (colon-separated paths)."
+  []
+  (if-let [env (some-> (System/getenv "FUTON_LIBRARY_ROOTS") str/trim not-empty)]
+    (->> (str/split env #":")
+         (map str/trim)
+         (remove str/blank?)
+         vec)
+    default-library-roots))
 
 ;;; ============================================================
 ;;; Pattern Library
 ;;; ============================================================
 
-(defn- parse-pattern-id
-  "Extract pattern ID from flexiarg file content.
-   Looks for @flexiarg or @multiarg header. Falls back to filename."
-  [file-content filename]
-  (or (when-let [m (re-find #"@(?:flexiarg|multiarg)\s+(\S+)" file-content)]
-        (second m))
-      (str/replace filename ".flexiarg" "")))
+(defn- file-kind [^java.io.File f]
+  (cond
+    (str/ends-with? (.getName f) ".flexiarg") :flexiarg
+    (str/ends-with? (.getName f) ".multiarg") :multiarg
+    :else :unknown))
 
-(defn- find-flexiarg-files
-  "Find all .flexiarg files in the given library roots."
+(defn- header-id
+  "Extract a single header id from TEXT using regex RE.
+  RE must have one capture group for the id."
+  [re text]
+  (when (string? text)
+    (when-let [m (re-find re text)]
+      (second m))))
+
+(defn- split-arg-blocks
+  "Split a .multiarg file into @arg blocks. If no @arg blocks exist, return []."
+  [text]
+  (let [lines (str/split-lines (or text ""))]
+    (loop [remaining lines
+           current []
+           in-arg? false
+           blocks []]
+      (if-let [line (first remaining)]
+        (let [starts-arg? (str/starts-with? (str/trim line) "@arg ")]
+          (cond
+            (and starts-arg? in-arg?)
+            (recur (rest remaining) [line] true (conj blocks (str/join "\n" current)))
+
+            starts-arg?
+            ;; Start a new @arg block; ignore any file preamble before the first @arg.
+            (recur (rest remaining) [line] true blocks)
+
+            :else
+            (recur (rest remaining)
+                   (if in-arg? (conj current line) current)
+                   in-arg?
+                   blocks)))
+        (if in-arg?
+          (conj blocks (str/join "\n" current))
+          blocks)))))
+
+(defn- pattern-files
+  "Find all .flexiarg and .multiarg files under ROOTS.
+
+  Returns seq of {:file File :root string}."
+  ([] (pattern-files (library-roots)))
+  ([roots]
+   (->> (or roots [])
+        (map str/trim)
+        (remove str/blank?)
+        (map (fn [root]
+               (let [base (io/file root)]
+                 (when (.exists base)
+                   (->> (file-seq base)
+                        (filter #(.isFile ^java.io.File %))
+                        (filter (fn [^java.io.File f]
+                                  (case (file-kind f)
+                                    (:flexiarg :multiarg) true
+                                    false)))
+                        (map (fn [f] {:file f :root root})))))))
+        (remove nil?)
+        (mapcat identity))))
+
+(defn- file->pattern-entries
+  "Convert one file into one-or-more pattern entries.
+
+  - .flexiarg => one entry (pattern id from @flexiarg or filename)
+  - .multiarg => one entry for @multiarg (or filename) + one entry per @arg block"
+  [{:keys [^java.io.File file root]}]
+  (let [kind (file-kind file)
+        filename (.getName file)
+        directory (.getName (.getParentFile file))
+        path (str file)
+        content (slurp file)]
+    (case kind
+      :flexiarg
+      (let [pid (or (header-id #"(?m)^[ \t]*@flexiarg\s+(\S+)" content)
+                    (str/replace filename ".flexiarg" ""))]
+        [{:file path
+          :filename filename
+          :pattern-id pid
+          :directory directory
+          :root root
+          :source/kind :flexiarg
+          :content content}])
+
+      :multiarg
+      (let [multi-pid (or (header-id #"(?m)^[ \t]*@multiarg\s+(\S+)" content)
+                          (str/replace filename ".multiarg" ""))
+            whole-entry {:file path
+                         :filename filename
+                         :pattern-id multi-pid
+                         :directory directory
+                         :root root
+                         :source/kind :multiarg
+                         :content content}
+            arg-entries
+            (->> (split-arg-blocks content)
+                 (keep (fn [block]
+                         (when-let [pid (header-id #"(?m)^[ \t]*@arg\s+(\S+)" block)]
+                           {:file path
+                            :filename filename
+                            :pattern-id pid
+                            :directory directory
+                            :root root
+                            :source/kind :multiarg-arg
+                            :content block})))
+                 vec)]
+        (into [whole-entry] arg-entries))
+
+      [])))
+
+(defn- find-pattern-entries
+  "Find all pattern entries across ROOTS, deduping by :pattern-id (first root wins)."
   [roots]
-  (->> roots
-       (mapcat (fn [root]
-                 (let [base (io/file root)]
-                   (when (.exists base)
-                     (->> (file-seq base)
-                          (filter #(str/ends-with? (.getName %) ".flexiarg"))
-                          (map (fn [f]
-                                 (let [content (slurp f)]
-                                   {:file (str f)
-                                    :filename (.getName f)
-                                    :pattern-id (parse-pattern-id content (.getName f))
-                                    :directory (.getName (.getParentFile f))
-                                    :root root
-                                    :content content}))))))))
-       ;; Deduplicate by pattern-id (first root wins)
-       (reduce (fn [acc p]
-                 (if (contains? (:seen acc) (:pattern-id p))
+  (->> (pattern-files roots)
+       (mapcat file->pattern-entries)
+       (reduce (fn [{:keys [seen patterns] :as acc} p]
+                 (if (contains? seen (:pattern-id p))
                    acc
-                   (-> acc
-                       (update :seen conj (:pattern-id p))
-                       (update :patterns conj p))))
+                   {:seen (conj seen (:pattern-id p))
+                    :patterns (conj patterns p)}))
                {:seen #{} :patterns []})
-       :patterns))
+       :patterns
+       vec))
 
 (defonce ^:private pattern-cache (atom nil))
-(defonce ^:private pattern-cache-mtime (atom 0))
+(defonce ^:private pattern-cache-checked-at (atom 0))
 
 (defn- load-patterns
-  "Load patterns, invalidating cache if any file has been modified."
+  "Load patterns, re-scanning at most every 5 seconds."
   []
   (let [now (System/currentTimeMillis)]
     ;; Re-check at most every 5 seconds
     (if (and @pattern-cache
-             (< (- now @pattern-cache-mtime) 5000))
+             (< (- now @pattern-cache-checked-at) 5000))
       @pattern-cache
-      (let [patterns (vec (find-flexiarg-files default-library-roots))]
+      (let [patterns (find-pattern-entries (library-roots))]
         (reset! pattern-cache patterns)
-        (reset! pattern-cache-mtime now)
+        (reset! pattern-cache-checked-at now)
         patterns))))
 
 (defn invalidate-pattern-cache!
   "Force pattern cache to reload on next access."
   []
   (reset! pattern-cache nil)
-  (reset! pattern-cache-mtime 0))
+  (reset! pattern-cache-checked-at 0))
 
 ;;; ============================================================
 ;;; Core.logic Relations: Transcripts
@@ -124,7 +223,6 @@
 ;;; ============================================================
 ;;; Core.logic Relations: Patterns
 ;;; ============================================================
-
 (defn patterno
   "Relate a logic var to pattern metadata maps (without :content)."
   [pattern-meta]
@@ -156,7 +254,29 @@
            a'))))))
 
 ;;; ============================================================
-;;; Federated Search (convenience, not core.logic)
+;;; Federated Search
+;;; ============================================================
+
+(defn search-texto
+  "Federated text search across all stores.
+   Relates source-type, entity-id, and match-info for a query string.
+   query-str must be a ground string."
+  [source entity-id match query-str]
+  (l/conde
+   ;; Search transcripts
+   [(l/== source :transcript)
+    (transcript-texto entity-id match query-str)]
+   ;; Search patterns
+   [(l/== source :pattern)
+    (pattern-texto entity-id query-str)
+    (l/fresh [meta]
+      (patterno meta)
+      (l/project [meta]
+        (l/== match meta)
+        (l/== entity-id (:pattern-id meta))))]))
+
+;;; ============================================================
+;;; Convenience: run queries and return Clojure data
 ;;; ============================================================
 
 (defn search
@@ -189,11 +309,11 @@
    (take limit (transcript/all-session-summaries))))
 
 (defn patterns
-  "List all known patterns. Returns seq of {:pattern-id :directory :file}."
+  "List all known patterns. Returns seq of {:pattern-id :directory :file :root :source/kind}."
   ([] (patterns {}))
   ([{:keys [limit] :or {limit 200}}]
    (->> (load-patterns)
-        (map #(select-keys % [:pattern-id :directory :file :root]))
+        (map #(select-keys % [:pattern-id :directory :file :root :source/kind]))
         (take limit))))
 
 (defn session-count

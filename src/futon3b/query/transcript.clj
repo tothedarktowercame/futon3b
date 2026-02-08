@@ -39,9 +39,10 @@
     (catch Exception _ nil)))
 
 (defn parse-transcript
-  "Parse a JSONL transcript file into a vector of message maps.
+  "Parse a JSONL transcript file into a realized vector of message maps.
    Each map gets :line-number and :session-id added.
-   Fully realizes inside with-open to avoid file descriptor leak."
+
+   Fully realizes inside with-open to avoid leaking readers via lazy seqs."
   [{:keys [file session-id]}]
   (with-open [rdr (io/reader file)]
     (into []
@@ -79,7 +80,7 @@
                      (str/includes? text query-lower))))
          (map (fn [msg]
                 (let [text (extract-text msg)
-                      idx (str/index-of (str/lower-case text) query-lower)
+                      idx (or (str/index-of (str/lower-case text) query-lower) 0)
                       start (max 0 (- idx 60))
                       end (min (count text) (+ idx (count query-text) 60))
                       snippet (subs text start end)]
