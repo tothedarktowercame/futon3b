@@ -17,7 +17,7 @@
 
 (defn find-transcript-files
   "Find all JSONL transcript files under ~/.claude/projects/.
-   Returns seq of {:file File :project-key string}."
+   Returns seq of {:file File :project-key string :session-id string}."
   ([] (find-transcript-files claude-projects-dir))
   ([base-dir]
    (let [base (io/file base-dir)]
@@ -39,16 +39,20 @@
     (catch Exception _ nil)))
 
 (defn parse-transcript
-  "Parse a JSONL transcript file into a seq of message maps.
-   Each map gets :line-number and :session-id added."
+  "Parse a JSONL transcript file into a vector of message maps.
+   Each map gets :line-number and :session-id added.
+   Fully realizes inside with-open to avoid file descriptor leak."
   [{:keys [file session-id]}]
-  (->> (line-seq (io/reader file))
-       (map-indexed (fn [i line]
-                      (when-let [parsed (safe-parse-json-line line)]
-                        (assoc parsed
-                               :line-number (inc i)
-                               :session-id session-id))))
-       (remove nil?)))
+  (with-open [rdr (io/reader file)]
+    (into []
+          (comp
+           (map-indexed (fn [i line]
+                          (when-let [parsed (safe-parse-json-line line)]
+                            (assoc parsed
+                                   :line-number (inc i)
+                                   :session-id session-id))))
+           (remove nil?))
+          (line-seq rdr))))
 
 ;;; ============================================================
 ;;; Text Search
@@ -65,7 +69,7 @@
 
 (defn search-transcript
   "Search a single transcript for text matches. Case-insensitive.
-   Returns seq of {:session-id :line-number :role :snippet :message}."
+   Returns seq of {:session-id :line-number :role :snippet :file}."
   [transcript-info query-text]
   (let [query-lower (str/lower-case query-text)
         messages (parse-transcript transcript-info)]
