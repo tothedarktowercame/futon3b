@@ -560,48 +560,63 @@ because:
 
 ### Query Interface
 
-A single search function that federates across stores:
+All queries are core.logic programs. Convenience wrappers provide common
+patterns, but the underlying language is always relational.
 
 ```clojure
-(futon3b.search/query
-  {:text "PlanetMath"              ;; full-text across all stores
-   :type #{:lab/session}           ;; optional: filter by entity type
-   :since #inst "2026-02-01"       ;; optional: time bound
-   :store #{:xtdb :sessions}})     ;; optional: restrict to stores
+;; "Find the session where I talked about PlanetMath"
+(run* [s snippet]
+  (session s)
+  (session-text s snippet)
+  (texto snippet "PlanetMath"))
+
+;; "How many sessions are open right now?"
+(count
+  (run* [s]
+    (session s)
+    (session-state s :open)))
+
+;; "Which Codex sessions did I run yesterday?"
+(run* [s]
+  (session s)
+  (session-agent s :codex)
+  (session-date s #inst "2026-02-07"))
 ```
 
-Returns unified results with source attribution:
+Results carry source attribution (which store the data came from):
 
 ```clojure
-[{:source :xtdb
-  :entity/type :lab/session
-  :lab/session-id "s-2026-02-05-abc"
-  :match {:field :lab/content :snippet "...discussing PlanetMath ingest..."}}
- {:source :sessions
-  :file "~/.claude/projects/-home-joe-code/abc123.jsonl"
-  :match {:line 847 :snippet "...PlanetMath structured data..."}}]
+;; Federated query returning from multiple stores
+(run* [source id snippet]
+  (conde
+    [(== source :xtdb)     (session id) (session-text id snippet)
+                           (texto snippet "PlanetMath")]
+    [(== source :transcript) (transcript id) (transcript-text id snippet)
+                           (texto snippet "PlanetMath")]))
 ```
 
 ### Query as Test
 
-The same query interface expresses gate invariant checks:
+The same language expresses gate invariant checks:
 
 ```clojure
 ;; G1 mandatory-pur: every PSR must have a matching PUR
-(futon3b.search/query
-  {:type #{:psr}
-   :where [:not [:exists {:type :pur :pur/psr-ref :this/id}]]})
+(run* [psr]
+  (psr-record psr)
+  (nafc pur-for-psr _ psr))
 
 ;; G0 par-as-obligation: every closed session must have a PAR
-(futon3b.search/query
-  {:type #{:lab/session}
-   :where [:and [:= :session/state :closed]
-                [:not [:exists {:type :par :par/session-ref :this/id}]]]})
+(run* [s]
+  (session s)
+  (session-state s :closed)
+  (nafc par-for-session _ s))
 
 ;; G4 capability-gate: assignments where agent lacks required capabilities
-(futon3b.search/query
-  {:type #{:assignment}
-   :where [:not [:subset :task/required-capabilities :agent/capabilities]]})
+(run* [task agent]
+  (assignment task agent)
+  (fresh [cap]
+    (task-requires task cap)
+    (nafc agent-capability agent cap)))
 ```
 
 When the gate pipeline lands (Part II), these queries become the test suite.
