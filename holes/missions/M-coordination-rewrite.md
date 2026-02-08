@@ -536,6 +536,101 @@ Pattern: `futon-theory/retroactive-canonicalization`
 - **Validator:** `futon5/src/futon5/ct/mission.clj`
 - **futon1a exemplar:** `holes/missions/M-futon1a-rebuild.md`
 
+## Prototype 0: Unified Search (Bootstrapping Deliverable)
+
+**Goal:** A query layer that reads across all five content stores and returns
+results through a single interface. This is the first concrete deliverable
+because:
+
+1. It solves a real user need (finding past sessions by content).
+2. It proves the composition approach (reading from five stores through one
+   interface) before building the full gate pipeline.
+3. The query language doubles as the testing language — gate invariants are
+   queries over the evidence graph.
+
+### The Five Stores
+
+| Store | Technology | Content | Current Query Surface |
+|-------|-----------|---------|----------------------|
+| futon1a | XTDB (RocksDB) | Entities, relations, lab sessions, patterns-as-entities | ID lookup only |
+| futon3a/memes | SQLite | Typed arrows, proposals, promotions, facts | SQL (internal) |
+| futon3a/notions | ANN (MiniLM, GloVe) | Pattern embeddings | `notions/search` (patterns only) |
+| library | Filesystem | `*.flexiarg` pattern source text | Manual browse |
+| sessions | Filesystem (JSONL) | `~/.claude/projects/` session transcripts | `grep` |
+
+### Query Interface
+
+A single search function that federates across stores:
+
+```clojure
+(futon3b.search/query
+  {:text "PlanetMath"              ;; full-text across all stores
+   :type #{:lab/session}           ;; optional: filter by entity type
+   :since #inst "2026-02-01"       ;; optional: time bound
+   :store #{:xtdb :sessions}})     ;; optional: restrict to stores
+```
+
+Returns unified results with source attribution:
+
+```clojure
+[{:source :xtdb
+  :entity/type :lab/session
+  :lab/session-id "s-2026-02-05-abc"
+  :match {:field :lab/content :snippet "...discussing PlanetMath ingest..."}}
+ {:source :sessions
+  :file "~/.claude/projects/-home-joe-code/abc123.jsonl"
+  :match {:line 847 :snippet "...PlanetMath structured data..."}}]
+```
+
+### Query as Test
+
+The same query interface expresses gate invariant checks:
+
+```clojure
+;; G1 mandatory-pur: every PSR must have a matching PUR
+(futon3b.search/query
+  {:type #{:psr}
+   :where [:not [:exists {:type :pur :pur/psr-ref :this/id}]]})
+
+;; G0 par-as-obligation: every closed session must have a PAR
+(futon3b.search/query
+  {:type #{:lab/session}
+   :where [:and [:= :session/state :closed]
+                [:not [:exists {:type :par :par/session-ref :this/id}]]]})
+
+;; G4 capability-gate: assignments where agent lacks required capabilities
+(futon3b.search/query
+  {:type #{:assignment}
+   :where [:not [:subset :task/required-capabilities :agent/capabilities]]})
+```
+
+When the gate pipeline lands (Part II), these queries become the test suite.
+The search layer IS the validation layer — human-facing and machine-facing
+queries through the same interface.
+
+### Prototype 0 Exit Conditions
+
+1. **Full-text search across XTDB** — query lab sessions, entities, and
+   patterns by content. "Find the session where I talked about PlanetMath"
+   returns results.
+2. **Session transcript search** — index `~/.claude/projects/` JSONL files
+   and return matches with file + line attribution.
+3. **Notions extension** — `futon.notions` search scope expanded beyond
+   patterns to include session content and XTDB entities.
+4. **Federated results** — a single query returns results from multiple
+   stores with source attribution.
+5. **At least one query-as-test example** — a gate invariant expressed as
+   a query and evaluated against real data (even if the data is from
+   futon3's existing PSR/PUR files, not yet from a running gate pipeline).
+
+### Scope Out (Prototype 0)
+
+- Write path (no mutations — search is read-only).
+- Gate pipeline (that's Part II).
+- Embedding re-indexing (use existing MiniLM embeddings; new content gets
+  keyword search only until re-indexed).
+- Production HTTP endpoint (REPL-first; HTTP can come in Prototype 1).
+
 ## Checkpoints
 
 (To be filled as work progresses. Each checkpoint records what was done,
