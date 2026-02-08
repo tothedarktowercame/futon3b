@@ -1,0 +1,23 @@
+@flexiarg coordination/mandatory-pur
+@title Mandatory PUR (G1)
+@keywords pur, validation, criteria, evaluation, outcome
+@audience coordination maintainers, futon3b builders
+@tone formal-analytic
+@references [futon-theory/proof-path futon-theory/stop-the-line]
+
+! conclusion:
+  If you want the system to produce organized knowledge, require a Pattern Use Record (PUR) that evaluates success criteria against produced artifacts.
+
+  + context: Pattern selection only matters if we evaluate whether it worked.
+  + IF:
+    you want coordination outputs to be evidence-driven
+
+  + HOWEVER:
+    without PUR, you cannot distinguish successful pattern use from failure, drift, or luck
+
+  + THEN:
+    require G1 to emit a PUR for the PSR, and reject when criteria are not met
+
+  + BECAUSE:
+    this creates a stable learning signal for the library evolution loop
+

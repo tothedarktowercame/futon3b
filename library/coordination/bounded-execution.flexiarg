@@ -1,0 +1,23 @@
+@flexiarg coordination/bounded-execution
+@title Bounded Execution (G2)
+@keywords budget, execution, bounded, timeout, sandbox
+@audience coordination maintainers, futon3b builders
+@tone formal-analytic
+@references [futon-theory/error-hierarchy futon-theory/stop-the-line]
+
+! conclusion:
+  If you want safe and predictable coordination, execute tasks under explicit budgets (time, tokens, side effects) and reject when budgets are exceeded.
+
+  + context: Coordination must treat execution as a resource-consuming action with a defined budget.
+  + IF:
+    you want an execution gate that cannot run away or wedge the system
+
+  + HOWEVER:
+    unbounded execution produces unpredictable latency and failure modes that break multi-agent systems
+
+  + THEN:
+    enforce a budget at G2 and short-circuit with a typed rejection when exceeded
+
+  + BECAUSE:
+    budgets create selection pressure and prevent hidden coordination costs
+

@@ -1,0 +1,35 @@
+@flexiarg coordination/ARGUMENT
+@title Coordination Argument (Gate Pipeline)
+@audience futon maintainers, coordination reviewers
+@tone formal-analytic
+@keywords coordination, gate, proof-path, typed-graph, evidence
+@references [coordination/task-shape-validation coordination/mandatory-psr coordination/mandatory-pur coordination/session-durability-check futon-theory/theory-as-exotype]
+
+! conclusion:
+  A six-gate pipeline over typed evidence records is the minimal structure that turns messy activity into organized knowledge with auditable records.
+
+  + context:
+    Futon3 already has working pieces (transport, check DSL, trails, workday intake, pattern retrieval bridges), but they are not composed into a single boundary that enforces pattern use and durable evidence.
+
+  + IF:
+    you want FUTON3 to reliably produce records that other futons can use to learn and act
+
+  + HOWEVER:
+    when pattern selection, execution, validation, and persistence are scattered, the system cannot enforce invariants like "no work runs without PSR" or "no success acknowledged before durability"
+
+  + THEN:
+    compose the existing implementations through a gate pipeline:
+    - G5 defines TaskSpec and binds intent to mission + success criteria
+    - G4 authorizes an agent and records an Assignment
+    - G3 requires PSR (or gap declaration) and records candidates
+    - G2 runs bounded execution and registers an Artifact
+    - G1 produces PUR by evaluating criteria against artifacts
+    - G0 gates success on durability and requires PAR to close the loop
+
+  + BECAUSE:
+    this structure is checkable (gate ordering, typed rejections, evidence shapes) and creates a proof-path that can be replayed, audited, and fed into glacial library evolution
+
+  + NEXT-STEPS:
+    next[Define a machine-checkable exotype diagram and concrete instantiation, and stop-the-line when concrete ports/edges drift from the exotype.]
+    next[Wire futon3b gate modules to futon3 transport surfaces (WS/HTTP) while preserving the "first failing gate wins" invariant.]
+

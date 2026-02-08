@@ -1,0 +1,26 @@
+@flexiarg coordination/task-shape-validation
+@title Task Shape Validation (G5)
+@keywords gate, validation, task, schema, reject, boundary
+@audience coordination maintainers, futon3b builders
+@tone formal-analytic
+@references [futon-theory/error-hierarchy futon-theory/stop-the-line]
+
+! conclusion:
+  If you want coordination to be auditable and repeatable, gate execution on a minimal well-typed task specification and reject malformed tasks with gate attribution.
+
+  + context: A coordination pipeline must not accept "do stuff" inputs; it must accept a task with mission binding and success criteria.
+  + IF:
+    you want multiple agents and tools to execute work safely
+
+  + HOWEVER:
+    accepting underspecified tasks makes later evidence unverifiable and failures ambiguous
+
+  + THEN:
+    validate the task shape at the boundary (G5) and reject with structured errors carrying `:gate/id` and `:error/key`
+
+  + BECAUSE:
+    early rejection is cheaper than running execution/validation on nonsense and later arguing about what was meant
+
+  + NEXT-STEPS:
+    next[Define TaskSpec shape and enforce it for all inputs crossing the gate pipeline boundary.]
+

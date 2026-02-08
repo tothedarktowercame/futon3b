@@ -1,0 +1,23 @@
+@flexiarg coordination/capability-gate
+@title Capability Gate (G4)
+@keywords auth, capability, registry, assignment, reject
+@audience coordination maintainers, futon3b builders
+@tone formal-analytic
+@references [futon-theory/error-hierarchy futon-theory/stop-the-line]
+
+! conclusion:
+  If you want reliable coordination, gate task execution on an explicit capability match between the task requirements and the registered agent.
+
+  + context: "Agent can do it" must be checked, not assumed.
+  + IF:
+    you want to route tasks to heterogeneous agents (humans, Codex, Claude, services)
+
+  + HOWEVER:
+    without authorization, tasks can be executed by agents that lack tools, permissions, or responsibility
+
+  + THEN:
+    require the agent to be present in the registry and validate capability match at G4
+
+  + BECAUSE:
+    otherwise failures are silent and attribution is unclear (who was supposed to do what?)
+

@@ -1,0 +1,23 @@
+@flexiarg coordination/mandatory-psr
+@title Mandatory PSR (G3)
+@keywords psr, pattern, selection, gap, obligation
+@audience coordination maintainers, futon3b builders
+@tone formal-analytic
+@references [futon-theory/proof-path futon-theory/stop-the-line]
+
+! conclusion:
+  If you want execution to be pattern-governed rather than post-hoc rationalized, require a Pattern Selection Record (PSR) before execution, or a typed gap declaration.
+
+  + context: Pattern use must be chosen before acting, not retroactively claimed.
+  + IF:
+    you want work to be guided by shared patterns and constraints
+
+  + HOWEVER:
+    letting execution proceed without PSR makes validation ambiguous and invites confabulated explanations
+
+  + THEN:
+    require PSR (pattern selected) or Gap PSR (pattern missing) at G3 before G2 can run
+
+  + BECAUSE:
+    this makes the pipeline auditable: you can compare chosen pattern vs outcome later
+
