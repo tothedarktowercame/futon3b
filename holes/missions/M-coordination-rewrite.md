@@ -523,6 +523,50 @@ Pattern: `futon-theory/retroactive-canonicalization`
 - [ ] Every tension resolution (E1-E7) maps to module + test
 - [ ] Trace: devmap IFR → coordination pattern → theory → exotype edge → gate → test
 
+## Tri-Theory Interpretation
+
+Every coordination pattern has three simultaneous readings, each backed by
+existing infrastructure in a different repo:
+
+| Theory | Substrate | Repo | What You Learn |
+|--------|-----------|------|----------------|
+| Prose | flexiarg (IF/HOWEVER/THEN/BECAUSE) | futon3/library/ | *Why* — intent, subtlety, rationale |
+| Logic | core.logic (miniKanren) | futon3b (Prototype 0) | *What* — which entities satisfy or violate the pattern now |
+| Tensor | wiring diagrams + eigendecomposition | futon5/ct/ + hexagram/ + wiring/ | *How much* — stability, spectral gap, robustness under perturbation |
+
+These are not metaphors. They are three executable interpretations of the
+same structural object:
+
+- `coordination-exotype.edn` is simultaneously a categorical diagram
+  (validated by `ct/mission.clj`), a logic program (queryable via
+  core.logic), and a tensor network (decomposable via `hexagram/lift.clj`).
+- Each coordination pattern (e.g. `mandatory-psr.flexiarg`) is simultaneously
+  prose ("every task must carry a PSR"), a logic rule (`(nafc psr-for-task
+  _ task)` finds violations), and a typed index in the tensor contraction
+  (a missing PSR is a dangling index — dimension mismatch).
+
+The tri-theory is not a feature of the rewrite — it is a consequence of the
+futon stack's existing architecture. futon5 created the wiring diagram format
+that `coordination-exotype.edn` uses. futon3's pattern library provides the
+prose. futon3b's core.logic layer provides the logic. The coordination
+rewrite is where all three interpretations converge on the same object
+for the first time.
+
+### Baldwin Cycle Through Three Theories
+
+The flexiformal pathway (EXPLORE → ASSIMILATE → CANALIZE) passes through
+all three theories:
+
+```
+EXPLORE      prose only          (ancestor pattern, informal)
+ASSIMILATE   prose + logic       (flexiformal query, partially executable)
+CANALIZE     prose + logic + tensor  (compiled gate, structurally certified)
+```
+
+A fully canalized pattern has all three readings. An ancestor has only
+prose. The progression from one to three is the canalization pathway —
+each theory added is a degree of freedom removed.
+
 ## Specification Reference
 
 - **Abstract diagram (exotype):** `futon5/data/missions/coordination-exotype.edn`
