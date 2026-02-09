@@ -501,14 +501,14 @@ Pattern: `futon-theory/retroactive-canonicalization`
 - [ ] Reviewer sign-off on Part I artifacts
 
 ### Part II (Product)
-- [ ] All six gate namespaces implemented with pattern/theory headers
-- [ ] Gate error catalog fully implemented with gate attribution
-- [ ] Pipeline test: G5→G0 with valid input produces complete proof-path
-- [ ] Pipeline test: first failing gate short-circuits, error carries gate id
-- [ ] Evidence shapes validate against specs
-- [ ] PSR→PUR→PAR chain tested end-to-end
+- [x] All six gate namespaces implemented with pattern/theory headers (CP-1)
+- [x] Gate error catalog fully implemented with gate attribution (CP-1: 14 error types)
+- [x] Pipeline test: G5→G0 with valid input produces complete proof-path (CP-1, CP-2)
+- [x] Pipeline test: first failing gate short-circuits, error carries gate id (CP-1)
+- [x] Evidence shapes validate against specs (CP-1: Malli validation at each gate)
+- [x] PSR→PUR→PAR chain tested end-to-end (CP-2: round-trip proof-path test)
 - [ ] `ct/mission.clj` validates concrete instantiation: 8/8 checks pass
-- [ ] Reviewer sign-off on code
+- [x] Reviewer sign-off on code (CP-2: Codex reviewed a78f2fc)
 
 ### Part III (Level 1)
 - [ ] L1-observe produces structured tension observations
@@ -518,9 +518,9 @@ Pattern: `futon-theory/retroactive-canonicalization`
 - [ ] `ct/mission.clj` validates complete diagram: 8/8 checks pass
 
 ### Derivation Requirements
-- [ ] Every gate module cites its coordination patterns (2 per gate)
+- [x] Every gate module cites its coordination patterns (2 per gate) (CP-1: ns docstrings)
 - [ ] Every coordination pattern cites its theory grounding (axiom or invariant)
-- [ ] Every tension resolution (E1-E7) maps to module + test
+- [x] Every tension resolution (E1-E7) maps to module + test (CP-2: AGENTS.md traceability table)
 - [ ] Trace: devmap IFR → coordination pattern → theory → exotype edge → gate → test
 
 ## Tri-Theory Interpretation
@@ -749,9 +749,42 @@ human readability.
 
 ## Checkpoints
 
-(To be filled as work progresses. Each checkpoint records what was done,
-what was reviewed, and what changed as a result of review — following the
-futon1a checkpoint convention.)
+### CP-0: Prototype 0 — Unified Search (2025-02-05)
+
+Federated search across session transcripts and pattern library via core.logic
+relations. `relations/search` returns results from both stores with source
+attribution.
+
+- **Built by:** Claude
+- **Files:** `src/futon3b/query/transcript.clj`, `src/futon3b/query/relations.clj`
+- **Verified:** session-count > 0, pattern-count > 0, cache invalidation, no fd leaks
+
+### CP-1: Gate Scaffold (2025-02-06)
+
+Full gate scaffold: 6 gate namespaces, pipeline composition, evidence shapes
+(Malli), error catalog (14 types), utility namespace. 8 tests, 36 assertions.
+
+- **Built by:** Codex (f0daac7, 395fd67)
+- **Reviewed by:** Claude — found validate.clj shape-validation bypass (fixed)
+- **Files:** `src/futon3/gate/*.clj`, `test/futon3/gate/pipeline_test.clj`
+
+### CP-2: Store Integration + Gate Logic (2025-02-08)
+
+Replaced injected stubs with real store calls. Gates read from and write to
+actual stores; pipeline produces durable evidence.
+
+- **Built by:** Claude (f3b6a1f, b9edd92)
+- **Reviewed by:** Codex (a78f2fc) — hardened EDN I/O (`read-string` →
+  `edn/read-string`), made paths repo-relative, made tests fully hermetic
+- **Changes:**
+  - G3 → real pattern library via `relations/pattern-exists?`
+  - G5 → `data/missions.edn` via `relations/load-missions`
+  - G0 → durable EDN sink via `relations/append-proof-path!`
+  - G2 → passthrough artifact mode for pre-completed tasks
+  - Proof-path store + query (`append-proof-path!`, `search-proof-paths`, `proof-patho`)
+  - Mission registry (`data/missions.edn`)
+- **Verified:** 17 tests, 54 assertions, 0 failures, 0 errors
+- **Tensions resolved:** E2, E3, E4, E5. Partial: E1, E7. Remaining: E6
 
 ---
 
