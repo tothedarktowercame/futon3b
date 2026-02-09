@@ -325,3 +325,81 @@
   "How many patterns exist in the library?"
   []
   (count (load-patterns)))
+
+(defn pattern-exists?
+  "Does a pattern with the given pattern-id exist in the library?"
+  [pattern-id]
+  (boolean (some #(= (:pattern-id %) pattern-id) (load-patterns))))
+
+(defn pattern-ids
+  "Return the set of all known pattern-ids."
+  []
+  (into #{} (map :pattern-id) (load-patterns)))
+
+;;; ============================================================
+;;; Proof Path Store
+;;; ============================================================
+
+(def ^:private default-proof-path-dir
+  (str (System/getProperty "user.home") "/code/futon3b/data/proof-paths"))
+
+(defn proof-path-dir
+  "Directory for proof-path EDN files. Override with FUTON_PROOF_PATH_DIR."
+  []
+  (or (System/getenv "FUTON_PROOF_PATH_DIR")
+      default-proof-path-dir))
+
+(defn append-proof-path!
+  "Append a proof-path + evidence map to an EDN log file.
+   Returns {:ok true :path/id <id> :file <path>}.
+   Each line in the file is one complete EDN map."
+  [{:keys [proof-path evidence]}]
+  (let [dir (io/file (proof-path-dir))
+        _ (.mkdirs dir)
+        path-id (:path/id proof-path)
+        file (io/file dir (str path-id ".edn"))
+        record {:path/id path-id
+                :proof-path proof-path
+                :evidence evidence
+                :persisted-at (str (java.time.Instant/now))}]
+    (spit file (prn-str record))
+    {:ok true :path/id path-id :file (str file)}))
+
+(defn load-proof-paths
+  "Load all proof-path EDN files from the proof-path directory.
+   Returns seq of maps."
+  []
+  (let [dir (io/file (proof-path-dir))]
+    (when (.exists dir)
+      (->> (file-seq dir)
+           (filter #(str/ends-with? (.getName %) ".edn"))
+           (map (fn [f]
+                  (try
+                    (read-string (slurp f))
+                    (catch Exception _ nil))))
+           (remove nil?)))))
+
+(defn search-proof-paths
+  "Search proof-paths for text matches. Case-insensitive."
+  [query-str]
+  (let [query-lower (str/lower-case query-str)]
+    (->> (load-proof-paths)
+         (filter (fn [pp]
+                   (str/includes?
+                    (str/lower-case (pr-str pp))
+                    query-lower))))))
+
+;;; ============================================================
+;;; Core.logic Relations: Proof Paths
+;;; ============================================================
+
+(defn proof-patho
+  "Relate a logic var to proof-path records from the proof-path store."
+  [proof-path-meta]
+  (fn [a]
+    (let [paths (load-proof-paths)]
+      (l/to-stream
+       (for [pp paths
+             :let [a' (l/unify a proof-path-meta pp)]
+             :when a']
+         a')))))

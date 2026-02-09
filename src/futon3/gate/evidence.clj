@@ -6,12 +6,17 @@
   - coordination/par-as-obligation"
   (:require [futon3.gate.errors :as errors]
             [futon3.gate.shapes :as shapes]
-            [futon3.gate.util :as u]))
+            [futon3.gate.util :as u]
+            [futon3b.query.relations :as relations]))
 
-(defn- sink-fn [state]
+(defn- sink-fn
+  "Resolve the evidence sink function. Tries injected sinks first,
+   falls back to the built-in EDN proof-path store."
+  [state]
   (or (get-in state [:ports :I-request :evidence/sink])
       (get-in state [:ports :I-environment :evidence/sink])
-      (get-in state [:ports :I-request :evidence-sink])))
+      (get-in state [:ports :I-request :evidence-sink])
+      relations/append-proof-path!))
 
 (defn- par-input [state]
   (or (get-in state [:ports :I-request :par])

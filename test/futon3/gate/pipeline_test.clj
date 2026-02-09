@@ -1,6 +1,8 @@
 (ns futon3.gate.pipeline-test
-  (:require [clojure.test :refer [deftest is testing]]
-            [futon3.gate.pipeline :as pipeline]))
+  (:require [clojure.test :refer [deftest is testing use-fixtures]]
+            [clojure.java.io :as io]
+            [futon3.gate.pipeline :as pipeline]
+            [futon3b.query.relations :as relations]))
 
 (def base-missions
   {"M-coordination-rewrite"
@@ -96,4 +98,83 @@
     (is (string? (get-in out [:O-proof-path :path/id])))
     (is (map? (:O-evidence out)))
     (is (map? (:O-artifacts out)))))
+
+;;; ============================================================
+;;; Phase 2: Store Integration Tests
+;;; ============================================================
+
+;; Use a temp dir for proof-paths so tests don't pollute real data.
+(def ^:dynamic *test-proof-dir* nil)
+
+(defn with-temp-proof-dir [f]
+  (let [dir (io/file (System/getProperty "java.io.tmpdir")
+                     (str "futon3b-test-" (System/nanoTime)))]
+    (.mkdirs dir)
+    (try
+      (with-redefs [relations/proof-path-dir (constantly (str dir))]
+        (binding [*test-proof-dir* dir]
+          (f)))
+      (finally
+        ;; Clean up
+        (doseq [f (reverse (file-seq dir))]
+          (.delete f))))))
+
+(use-fixtures :each with-temp-proof-dir)
+
+(deftest g3-resolves-real-pattern
+  (testing "G3 checks the real pattern library when no I-patterns set provided"
+    ;; Use a pattern we know exists in the library
+    (let [real-pattern "coordination/mandatory-psr"
+          input (-> base-input
+                    (dissoc :I-patterns)  ;; no injected set — force library lookup
+                    (assoc-in [:I-request :psr :psr/pattern-ref] real-pattern))
+          out (pipeline/run input)]
+      (is (true? (:ok out))
+          (str "Pipeline should succeed with real pattern " real-pattern)))))
+
+(deftest g3-rejects-nonexistent-real-pattern
+  (testing "G3 rejects a pattern that doesn't exist in the real library"
+    (let [input (-> base-input
+                    (dissoc :I-patterns)
+                    (assoc-in [:I-request :psr :psr/pattern-ref]
+                              "nonexistent/fake-pattern-xyz"))
+          out (pipeline/run input)]
+      (is (false? (:ok out)))
+      (is (= :g3 (:gate/id out)))
+      (is (= :g3/pattern-not-found (:error/key out))))))
+
+(deftest durable-sink-writes-proof-path
+  (testing "Pipeline without injected sink writes proof-path to EDN file"
+    (let [input (-> base-input
+                    (update-in [:I-request] dissoc :evidence/sink)  ;; use built-in sink
+                    (assoc-in [:I-request :task :task/id] "T-durable-test"))
+          out (pipeline/run input)]
+      (is (true? (:ok out))
+          "Pipeline should succeed with built-in EDN sink")
+      (is (string? (get-in out [:O-proof-path :path/id])))
+      ;; Verify the file was written
+      (let [files (->> (file-seq *test-proof-dir*)
+                       (filter #(clojure.string/ends-with? (.getName %) ".edn")))]
+        (is (= 1 (count files))
+            "Exactly one proof-path EDN file should be written")
+        (when (seq files)
+          (let [content (read-string (slurp (first files)))]
+            (is (= (get-in out [:O-proof-path :path/id]) (:path/id content)))
+            (is (= 6 (count (get-in content [:proof-path :events]))))
+            (is (some? (:persisted-at content)))))))))
+
+(deftest proof-path-round-trip-queryable
+  (testing "Proof-path written by pipeline is queryable via relations"
+    (let [task-id (str "T-roundtrip-" (System/nanoTime))
+          input (-> base-input
+                    (update-in [:I-request] dissoc :evidence/sink)
+                    (assoc-in [:I-request :task :task/id] task-id))
+          out (pipeline/run input)]
+      (is (true? (:ok out)))
+      ;; Now search for it
+      (let [found (relations/search-proof-paths task-id)]
+        (is (= 1 (count found))
+            "Should find exactly one proof-path matching the task-id")
+        (when (seq found)
+          (is (= task-id (get-in (first found) [:evidence :task-spec :task/id]))))))))
 

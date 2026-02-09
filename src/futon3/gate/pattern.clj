@@ -6,15 +6,18 @@
   - coordination/pattern-search-protocol"
   (:require [futon3.gate.errors :as errors]
             [futon3.gate.shapes :as shapes]
-            [futon3.gate.util :as u]))
+            [futon3.gate.util :as u]
+            [futon3b.query.relations :as relations]))
 
 (defn- patterns-exists?
+  "Check if a pattern-id exists. Tries I-patterns config first,
+   falls back to the real pattern library via futon3b.query.relations."
   [patterns pattern-id]
   (cond
     (fn? (:patterns/exists? patterns)) (boolean ((:patterns/exists? patterns) pattern-id))
     (set? (:patterns/ids patterns)) (contains? (:patterns/ids patterns) pattern-id)
     (coll? (:patterns/ids patterns)) (contains? (set (:patterns/ids patterns)) pattern-id)
-    :else false))
+    :else (relations/pattern-exists? pattern-id)))
 
 (defn apply!
   "Require a PSR (or a gap declaration) and ensure the referenced pattern exists.
