@@ -8,7 +8,9 @@
             [futon3.gate.exec :as g2]
             [futon3.gate.pattern :as g3]
             [futon3.gate.task :as g5]
-            [futon3.gate.validate :as g1]))
+            [futon3.gate.util :as u]
+            [futon3.gate.validate :as g1]
+            [futon3b.query.relations :as relations]))
 
 (defn- ok? [state]
   (true? (get-in state [:result :ok])))
@@ -42,8 +44,24 @@
         s6 (if (ok? s5) (gate-step g0/apply! s5) s5)]
     (if (ok? s6)
       (:result s6)
-      ;; Rejection: include partial proof-path for audit.
-      (assoc (:result s6)
-             :proof-path (:proof-path s6)
-             :evidence (:evidence s6)))))
+      ;; Rejection: persist a minimal proof-path so L1 can observe the failure.
+      (let [result (:result s6)
+            rejection-event {:gate/id (:gate/id result)
+                             :gate/record {:error/key (:error/key result)}
+                             :gate/at (u/now-iso)}
+            proof-path {:path/id (u/gen-id "path")
+                        :events (conj (vec (:proof-path s6)) rejection-event)}
+            sink (or (get-in s6 [:ports :I-request :evidence/sink])
+                     (get-in s6 [:ports :I-environment :evidence/sink])
+                     relations/append-proof-path!)]
+        ;; Best-effort write; don't let sink failure mask the gate rejection.
+        (try
+          (when (fn? sink)
+            (sink {:proof-path proof-path
+                   :evidence (assoc (:evidence s6)
+                                    :rejection result)}))
+          (catch Throwable _))
+        (assoc result
+               :proof-path (:proof-path s6)
+               :evidence (:evidence s6))))))
 

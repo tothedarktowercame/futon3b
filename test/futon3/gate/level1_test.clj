@@ -1,5 +1,6 @@
 (ns futon3.gate.level1-test
   (:require [clojure.test :refer [deftest is testing use-fixtures]]
+            [clojure.edn :as edn]
             [clojure.java.io :as io]
             [clojure.string :as str]
             [futon3.gate.observe :as observe]
@@ -366,3 +367,111 @@
                  :canon/rationale "Test canonization"
                  :canon/at "2026-02-09T00:00:00Z"}]
       (is (m/validate shapes/CanonizationEvent event)))))
+
+;;; ============================================================
+;;; Rejection Persistence Tests (Codex suggestion 1)
+;;; ============================================================
+
+(deftest rejection-persists-proof-path
+  (testing "Pipeline rejection writes a minimal proof-path to the store"
+    (let [input {:I-missions {"M-coordination-rewrite"
+                              {:mission/id "M-coordination-rewrite"
+                               :mission/state :active}}
+                 :I-patterns {:patterns/ids #{"coordination/mandatory-psr"}}
+                 :I-registry {:agents {"codex-1" {:capabilities [:coordination/execute]}}}
+                 :I-environment {}
+                 :opts {:budget/ms 200}
+                 :I-request {:task {:task/id "T-reject-test"
+                                    :task/mission-ref "M-coordination-rewrite"
+                                    :task/intent "test rejection persistence"
+                                    :task/success-criteria [:demo/ok]
+                                    :task/required-capabilities [:coordination/execute]}
+                             :agent-id "codex-1"
+                             ;; Missing PSR → G3 rejects
+                             :exec/fn (fn [_] {:artifact/type :demo :artifact/ref {} :exec/success? true})
+                             :par {:par/session-ref "S-rej"
+                                   :par/what-worked "n/a"
+                                   :par/what-didnt "n/a"
+                                   :par/prediction-errors []
+                                   :par/suggestions []}}}
+          out (pipeline/run input)]
+      ;; Confirm rejection
+      (is (false? (:ok out)))
+      (is (= :g3/no-psr (:error/key out)))
+      ;; Now check that a proof-path was persisted
+      (let [files (->> (file-seq *test-proof-dir*)
+                       (filter #(str/ends-with? (.getName %) ".edn")))]
+        (is (= 1 (count files))
+            "Rejected pipeline should persist exactly one proof-path EDN file")
+        (when (seq files)
+          (let [content (edn/read-string (slurp (first files)))]
+            (is (some? (:proof-path content)))
+            (is (some? (get-in content [:evidence :rejection])))))))))
+
+(deftest rejection-produces-observable-tension
+  (testing "Pre-symbolic rejections produce an observable tension in the next L1 pass"
+    (let [input {:I-missions {"M-coordination-rewrite"
+                              {:mission/id "M-coordination-rewrite"
+                               :mission/state :active}}
+                 :I-patterns {:patterns/ids #{"coordination/mandatory-psr"}}
+                 :I-registry {:agents {"codex-1" {:capabilities [:coordination/execute]}}}
+                 :I-environment {}
+                 :opts {:budget/ms 200}}
+          ;; Create 3 rejections at G3 (missing PSR)
+          _ (dotimes [i 3]
+              (pipeline/run
+                (assoc input
+                  :I-request {:task {:task/id (str "T-rej-" i)
+                                     :task/mission-ref "M-coordination-rewrite"
+                                     :task/intent "test"
+                                     :task/success-criteria [:demo/ok]
+                                     :task/required-capabilities [:coordination/execute]}
+                              :agent-id "codex-1"
+                              :exec/fn (fn [_] {:artifact/type :demo :artifact/ref {} :exec/success? true})
+                              :par {:par/session-ref (str "S-rej-" i)
+                                    :par/what-worked "n/a" :par/what-didnt "n/a"
+                                    :par/prediction-errors [] :par/suggestions []}})))
+          ;; Load persisted proof-paths and run L1
+          proof-paths (relations/load-proof-paths)]
+      (is (= 3 (count proof-paths))
+          "Should have 3 persisted rejection proof-paths")
+      (let [l1-result (level1/run {:I-tensions proof-paths
+                                   :I-patterns {}
+                                   :opts {:min-frequency 2}})]
+        (is (true? (:ok l1-result)))
+        (let [pressures (->> (:observations l1-result)
+                             (filter #(= :pre-symbolic-pressure (:tension/type %))))]
+          (is (pos? (count pressures))
+              "L1 should detect pre-symbolic pressure from persisted rejections"))))))
+
+;;; ============================================================
+;;; Canonicalizer Overwrite Guard Tests (Codex suggestion 2)
+;;; ============================================================
+
+(deftest canonicalizer-refuses-overwrite
+  (testing "canalize! refuses to clobber an existing pattern"
+    (let [;; coordination/mandatory-psr already exists in the hermetic library
+          tension {:tension/id "tension-overwrite"
+                   :tension/type :structural-irritation
+                   :tension/evidence-refs ["path-1" "path-2" "path-3"]
+                   :tension/frequency 5
+                   :tension/contexts ["M-coordination-rewrite" "M-other"]
+                   :tension/description "Would overwrite mandatory-psr"
+                   :tension/fingerprint "mandatory-psr"
+                   :tension/observed-at (str (java.time.Instant/now))}
+          ;; Manually craft a selection event that targets the existing pattern
+          selection-event {:canon/id "canon-overwrite"
+                           :canon/tension-ref "tension-overwrite"
+                           :canon/phase :selection
+                           :canon/pattern-id "coordination/mandatory-psr"
+                           :canon/action :create
+                           :canon/rationale "test overwrite"
+                           :canon/at (str (java.time.Instant/now))}]
+      ;; canalize! should throw because the pattern already exists
+      (is (thrown? clojure.lang.ExceptionInfo
+                   (canon/canalize! tension selection-event)))
+      ;; Verify the existing file is unchanged
+      (let [file (io/file *test-library-dir* "coordination" "mandatory-psr.flexiarg")
+            content (slurp file)]
+        (is (str/includes? content "Mandatory PSR (Test Fixture)")
+            "Existing flexiarg content should be unchanged after refused canalization")))))

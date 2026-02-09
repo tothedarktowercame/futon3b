@@ -39,7 +39,8 @@
    :l1/no-proof-paths     {:gate :l1-observe :http/status 422 :message "No proof-paths available for tension analysis."}
    :l1/no-tensions-found  {:gate :l1-observe :http/status 200 :message "No structural tensions detected."}
    :l1/canon-no-candidate {:gate :l1-canon   :http/status 422 :message "No tension meets canonicalization threshold."}
-   :l1/write-failed       {:gate :l1-canon   :http/status 503 :message "Failed to write canonized pattern to library."}})
+   :l1/write-failed       {:gate :l1-canon   :http/status 503 :message "Failed to write canonized pattern to library."}
+   :l1/pattern-exists     {:gate :l1-canon   :http/status 409 :message "Pattern already exists in library; canalization refused to overwrite."}})
 
 (defn- normalize-gate-id [gate]
   (cond

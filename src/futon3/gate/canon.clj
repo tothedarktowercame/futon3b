@@ -97,20 +97,35 @@
 
   Generates minimal flexiarg content from the tension observation.
   Writes to the first library root from relations/library-roots.
+  Refuses to overwrite an existing pattern — returns a structured error
+  via :l1/pattern-exists if the pattern-id already exists in the library.
   Returns CanonizationEvent with :canon/phase :canalization."
   [tension selection-event]
   (let [pattern-id (:canon/pattern-id selection-event)
         content (tension->flexiarg-content tension pattern-id)
         roots (relations/library-roots)
         root (first roots)]
-    (if (nil? root)
+    (cond
+      (nil? root)
       (throw (ex-info "No library root available" {:pattern-id pattern-id}))
-      (let [;; pattern-id like "coordination/my-slug" → file coordination/my-slug.flexiarg
-            parts (str/split pattern-id #"/")
+
+      (relations/pattern-exists? pattern-id)
+      (throw (ex-info (str "Pattern already exists: " pattern-id)
+                       {:pattern-id pattern-id
+                        :error/key :l1/pattern-exists}))
+
+      :else
+      (let [parts (str/split pattern-id #"/")
             dir-name (if (> (count parts) 1) (first parts) "coordination")
             file-name (str (last parts) ".flexiarg")
             dir (io/file root dir-name)
             file (io/file dir file-name)]
+        ;; Double-check: refuse to clobber an existing file even if cache missed it.
+        (when (.exists file)
+          (throw (ex-info (str "Flexiarg file already exists: " file)
+                          {:pattern-id pattern-id
+                           :file (str file)
+                           :error/key :l1/pattern-exists})))
         (try
           (.mkdirs dir)
           (spit file content)
