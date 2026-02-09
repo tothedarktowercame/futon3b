@@ -15,6 +15,7 @@
             [clojure.edn :as edn]
             [clojure.java.io :as io]
             [clojure.string :as str]
+            [futon3.gate.shapes :as shapes]
             [futon3b.query.transcript :as transcript]))
 
 ;;; ============================================================
@@ -378,6 +379,7 @@
    Returns {:ok true :path/id <id> :file <path>}.
    Each line in the file is one complete EDN map."
   [{:keys [proof-path evidence]}]
+  (shapes/validate! shapes/ProofPath proof-path)
   (let [dir (io/file (proof-path-dir))
         _ (.mkdirs dir)
         path-id (:path/id proof-path)

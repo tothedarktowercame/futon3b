@@ -77,10 +77,19 @@
    [:canon/rationale [:string {:min 1}]]
    [:canon/at [:string {:min 1}]]])
 
+(def GateRejection
+  "Structured gate rejection record, suitable for inclusion in a proof-path."
+  [:map {:closed true}
+   [:type [:enum :gate/reject]]
+   [:error/key :keyword]
+   [:http/status :int]
+   [:message [:string {:min 1}]]
+   [:details map?]])
+
 (def ProofPathEvent
   [:map {:closed true}
    [:gate/id [:enum :g5 :g4 :g3 :g2 :g1 :g0 :l1-observe :l1-canon]]
-   [:gate/record [:or TaskSpec Assignment PSR Artifact PUR PAR TensionObservation CanonizationEvent]]
+   [:gate/record [:or TaskSpec Assignment PSR Artifact PUR PAR TensionObservation CanonizationEvent GateRejection]]
    [:gate/at [:string {:min 1}]]])
 
 (def ProofPath
@@ -96,4 +105,3 @@
     (throw (ex-info "Invalid evidence shape"
                     {:details (me/humanize (m/explain schema value))
                      :value value}))))
-

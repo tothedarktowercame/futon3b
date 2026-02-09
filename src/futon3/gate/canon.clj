@@ -169,6 +169,13 @@
                                         {:naming naming
                                          :selection selection
                                          :canalization canalization}))
+                              (catch clojure.lang.ExceptionInfo e
+                                (let [data (ex-data e)]
+                                  (update acc :errors conj
+                                          {:tension-id (:tension/id tension)
+                                           :error/key (:error/key data)
+                                           :details (dissoc data :error/key)
+                                           :error (.getMessage e)})))
                               (catch Exception e
                                 (update acc :errors conj
                                         {:tension-id (:tension/id tension)
@@ -186,14 +193,16 @@
             ;; Proof-path events must carry typed evidence records (see shapes/ProofPathEvent).
             ;; Record each canonization event rather than emitting a summary map.
             canon-at (u/now-iso)
-            events (mapv (fn [e]
+             events (mapv (fn [e]
                            {:gate/id :l1-canon
                             :gate/record e
                             :gate/at canon-at})
                          all-events)]
         (if (and (empty? canon-events) (seq (:errors results)))
-          (assoc state :result (errors/reject :l1/write-failed
-                                              {:errors (:errors results)}))
+          (let [error-key (or (some :error/key (:errors results))
+                              :l1/write-failed)]
+            (assoc state :result (errors/reject error-key
+                                                {:errors (:errors results)})))
           (-> state
               (assoc-in [:evidence :canonizations] all-events)
               (update :proof-path (fnil into []) events)

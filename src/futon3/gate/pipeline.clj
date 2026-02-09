@@ -8,6 +8,7 @@
             [futon3.gate.exec :as g2]
             [futon3.gate.pattern :as g3]
             [futon3.gate.task :as g5]
+            [futon3.gate.shapes :as shapes]
             [futon3.gate.util :as u]
             [futon3.gate.validate :as g1]
             [futon3b.query.relations :as relations]))
@@ -46,22 +47,33 @@
       (:result s6)
       ;; Rejection: persist a minimal proof-path so L1 can observe the failure.
       (let [result (:result s6)
+            rejection-record {:type (:type result)
+                              :error/key (:error/key result)
+                              :http/status (:http/status result)
+                              :message (:message result)
+                              :details (or (:details result) {})}
             rejection-event {:gate/id (:gate/id result)
-                             :gate/record {:error/key (:error/key result)}
+                             :gate/record rejection-record
                              :gate/at (u/now-iso)}
             proof-path {:path/id (u/gen-id "path")
                         :events (conj (vec (:proof-path s6)) rejection-event)}
-            sink (or (get-in s6 [:ports :I-request :evidence/sink])
-                     (get-in s6 [:ports :I-environment :evidence/sink])
-                     relations/append-proof-path!)]
+            user-sink (or (get-in s6 [:ports :I-request :evidence/sink])
+                          (get-in s6 [:ports :I-environment :evidence/sink]))]
         ;; Best-effort write; don't let sink failure mask the gate rejection.
         (try
-          (when (fn? sink)
-            (sink {:proof-path proof-path
-                   :evidence (assoc (:evidence s6)
-                                    :rejection result)}))
+          ;; Ensure the persisted proof-path stays within the typed evidence boundary.
+          (shapes/validate! shapes/ProofPath proof-path)
+          ;; Always persist to the durable store so L1 can load it.
+          (relations/append-proof-path! {:proof-path proof-path
+                                         :evidence (assoc (:evidence s6)
+                                                          :rejection result)})
+          ;; Optionally also publish to an external sink, if provided.
+          (when (and (fn? user-sink)
+                     (not (identical? user-sink relations/append-proof-path!)))
+            (user-sink {:proof-path proof-path
+                        :evidence (assoc (:evidence s6)
+                                         :rejection result)}))
           (catch Throwable _))
         (assoc result
                :proof-path (:proof-path s6)
                :evidence (:evidence s6))))))
-

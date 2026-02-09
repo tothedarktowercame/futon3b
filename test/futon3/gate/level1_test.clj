@@ -406,7 +406,14 @@
         (when (seq files)
           (let [content (edn/read-string (slurp (first files)))]
             (is (some? (:proof-path content)))
-            (is (some? (get-in content [:evidence :rejection])))))))))
+            (is (some? (get-in content [:evidence :rejection])))
+            (is (m/validate shapes/ProofPath (:proof-path content))
+                "Persisted proof-path must remain within the typed evidence boundary")
+            (let [events (get-in content [:proof-path :events])
+                  last-event (last events)]
+              (is (= :g3 (:gate/id last-event)))
+              (is (= :gate/reject (get-in last-event [:gate/record :type])))
+              (is (= :g3/no-psr (get-in last-event [:gate/record :error/key]))))))))))
 
 (deftest rejection-produces-observable-tension
   (testing "Pre-symbolic rejections produce an observable tension in the next L1 pass"
@@ -468,8 +475,12 @@
                            :canon/rationale "test overwrite"
                            :canon/at (str (java.time.Instant/now))}]
       ;; canalize! should throw because the pattern already exists
-      (is (thrown? clojure.lang.ExceptionInfo
-                   (canon/canalize! tension selection-event)))
+      (let [ex (try
+                 (canon/canalize! tension selection-event)
+                 nil
+                 (catch clojure.lang.ExceptionInfo e e))]
+        (is (some? ex))
+        (is (= :l1/pattern-exists (:error/key (ex-data ex)))))
       ;; Verify the existing file is unchanged
       (let [file (io/file *test-library-dir* "coordination" "mandatory-psr.flexiarg")
             content (slurp file)]
