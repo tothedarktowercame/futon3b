@@ -791,7 +791,7 @@ human readability.
 
 ## Checkpoints
 
-### CP-0: Prototype 0 — Unified Search (2025-02-05)
+### CP-0: Prototype 0 — Unified Search (2026-02-08)
 
 Federated search across session transcripts and pattern library via core.logic
 relations. `relations/search` returns results from both stores with source
@@ -801,7 +801,7 @@ attribution.
 - **Files:** `src/futon3b/query/transcript.clj`, `src/futon3b/query/relations.clj`
 - **Verified:** session-count > 0, pattern-count > 0, cache invalidation, no fd leaks
 
-### CP-1: Gate Scaffold (2025-02-06)
+### CP-1: Gate Scaffold (2026-02-09)
 
 Full gate scaffold: 6 gate namespaces, pipeline composition, evidence shapes
 (Malli), error catalog (14 types), utility namespace. 8 tests, 36 assertions.
@@ -810,7 +810,7 @@ Full gate scaffold: 6 gate namespaces, pipeline composition, evidence shapes
 - **Reviewed by:** Claude — found validate.clj shape-validation bypass (fixed)
 - **Files:** `src/futon3/gate/*.clj`, `test/futon3/gate/pipeline_test.clj`
 
-### CP-2: Store Integration + Gate Logic (2025-02-08)
+### CP-2: Store Integration + Gate Logic (2026-02-09)
 
 Replaced injected stubs with real store calls. Gates read from and write to
 actual stores; pipeline produces durable evidence.
@@ -828,25 +828,34 @@ actual stores; pipeline produces durable evidence.
 - **Verified:** 17 tests, 54 assertions, 0 failures, 0 errors
 - **Tensions resolved:** E2, E3, E4, E5. Partial: E1, E7. Remaining: E6
 
-### CP-2b: Exotype Validation (2025-02-08)
+### CP-2b: Exotype Validation (2026-02-09)
 
 Updated `futon5/data/missions/futon3-coordination.edn` to match actual
 namespace names and set `:mission/state :active`. Ran `ct/mission.clj`:
 
 ```
-{:all-valid true,
- :checks
- [{:valid true, :check :completeness}
-  {:valid true, :check :coverage}
-  {:valid true, :check :no-orphan-inputs}
-  {:valid true, :check :type-safety}
-  {:valid true, :check :spec-coverage}
-  {:valid true, :check :timescale-ordering}
-  {:valid true, :check :exogeneity}
-  {:valid true, :check :compositional-closure}]}
+cd /home/joe/code/futon5
+clojure -M -m futon5.ct.mission \
+  data/missions/coordination-exotype.edn \
+  data/missions/futon3-coordination.edn
+
+[PASS] completeness
+[PASS] coverage
+[PASS] orphans
+[PASS] type-safety
+[PASS] spec-coverage
+[PASS] I3-timescale-separation
+[PASS] I4-preference-exogeneity
+[PASS] I6-compositional-closure
+Overall: PASS (profile=:prototype0 required-levels=#{:L0})
 ```
 
 8/8 checks pass. **Part II is now fully complete.**
+
+### CP-3: Derivation Requirements (2026-02-09)
+
+All 12 coordination patterns now include `@theory-grounding [...]`, and an
+end-to-end traceability example is included in this mission doc.
 
 ---
 
