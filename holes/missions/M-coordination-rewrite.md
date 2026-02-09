@@ -519,9 +519,51 @@ Pattern: `futon-theory/retroactive-canonicalization`
 
 ### Derivation Requirements
 - [x] Every gate module cites its coordination patterns (2 per gate) (CP-1: ns docstrings)
-- [ ] Every coordination pattern cites its theory grounding (axiom or invariant)
+- [x] Every coordination pattern cites its theory grounding (axiom or invariant) (CP-3: @theory-grounding in all 12 flexiargs)
 - [x] Every tension resolution (E1-E7) maps to module + test (CP-2: AGENTS.md traceability table)
-- [ ] Trace: devmap IFR → coordination pattern → theory → exotype edge → gate → test
+- [x] Trace: devmap IFR → coordination pattern → theory → exotype edge → gate → test (CP-3: see below)
+
+#### End-to-End Traceability Example: Mandatory PSR
+
+```
+Step 1 — Devmap IFR
+  futon3.devmap: "turn messy activity into organised knowledge by checking
+  work against shared patterns and producing auditable records"
+
+Step 2 — Coordination Pattern
+  library/coordination/mandatory-psr.flexiarg
+  THEN: require PSR or Gap PSR at G3 before G2 can run
+  BECAUSE: this makes the pipeline auditable
+
+Step 3 — Theory Grounding
+  @theory-grounding [A3(Evidence-driven) A1(Auditability) I5(Model-adequacy)]
+  A3: "progression requires proof" — PSR before execution = evidence before claim
+  A1: "every operation traceable" — PSR makes pattern choice auditable
+
+Step 4 — Exotype Edge
+  coordination-exotype.edn: {:from :I-patterns :to :G3 :type :config}
+  coordination-exotype.edn: {:from :G3 :to :G2 :type :xtdb-entity}  ;; PSR
+
+Step 5 — Concrete Diagram Edge
+  futon3-coordination.edn: {:from :I-patterns :to :G3-pattern :type :config}
+  futon3-coordination.edn: {:from :G3-pattern :to :G2-execute :type :xtdb-entity}
+
+Step 6 — Gate Module
+  futon3.gate.pattern/apply! (src/futon3/gate/pattern.clj)
+  Falls back to relations/pattern-exists? when no injected patterns config
+
+Step 7 — Test
+  futon3.gate.pipeline-test/g3-resolves-real-pattern
+  futon3.gate.pipeline-test/g3-rejects-nonexistent-real-pattern
+  futon3.gate.pipeline-test/rejects-pattern-not-found
+
+Step 8 — Evidence Shape
+  futon3.gate.shapes/PSR {:psr/id :psr/task-id :psr/pattern-ref ...}
+
+Step 9 — Error
+  futon3.gate.errors :g3/pattern-not-found → "Referenced pattern not in library"
+  futon3.gate.errors :g3/no-psr → "No PSR provided and no gap declaration"
+```
 
 ## Tri-Theory Interpretation
 

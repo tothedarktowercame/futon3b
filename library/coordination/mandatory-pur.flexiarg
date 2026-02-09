@@ -4,6 +4,7 @@
 @audience coordination maintainers, futon3b builders
 @tone formal-analytic
 @references [futon-theory/proof-path futon-theory/stop-the-line]
+@theory-grounding [A3(Evidence-driven) A1(Auditability)]
 
 ! conclusion:
   If you want the system to produce organized knowledge, require a Pattern Use Record (PUR) that evaluates success criteria against produced artifacts.
