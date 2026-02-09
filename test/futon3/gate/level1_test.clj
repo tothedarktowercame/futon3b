@@ -452,6 +452,52 @@
               "L1 should detect pre-symbolic pressure from persisted rejections"))))))
 
 ;;; ============================================================
+;;; Rejection Detail Context (Follow-up tightening)
+;;; ============================================================
+
+(deftest rejection-context-prefers-details-mission-ref
+  (testing "When TaskSpec doesn't exist (e.g. G5 rejects), L1 uses mission-ref from rejection details"
+    (let [base {:I-missions {"M-coordination-rewrite"
+                             {:mission/id "M-coordination-rewrite"
+                              :mission/state :active}}
+                :I-patterns {:patterns/ids #{"coordination/mandatory-psr"}}
+                :I-registry {:agents {"codex-1" {:capabilities [:coordination/execute]}}}
+                :I-environment {}
+                :opts {:budget/ms 200}}
+          bad-mission "M-not-real"]
+      ;; Create 3 G5 rejections that still carry :task/mission-ref in :details.
+      (dotimes [i 3]
+        (pipeline/run
+          (assoc base
+            :I-request {:task {:task/id (str "T-g5-rej-" i)
+                               :task/mission-ref bad-mission
+                               :task/intent "test g5 rejection context"
+                               :task/success-criteria [:demo/ok]
+                               :task/required-capabilities [:coordination/execute]}
+                        :agent-id "codex-1"
+                        ;; Provide PSR so G3 isn't the rejection point (G5 should reject first).
+                        :psr {:psr/type :selection
+                              :psr/pattern-ref "coordination/mandatory-psr"
+                              :psr/rationale "irrelevant"}
+                        :exec/fn (fn [_] {:artifact/type :demo :artifact/ref {} :exec/success? true})
+                        :par {:par/session-ref (str "S-g5-rej-" i)
+                              :par/what-worked "n/a" :par/what-didnt "n/a"
+                              :par/prediction-errors [] :par/suggestions []}})))
+      (let [proof-paths (relations/load-proof-paths)
+            state {:ports {:I-tensions proof-paths}
+                   :evidence {}
+                   :proof-path []
+                   :opts {:min-frequency 2}}
+            out (observe/apply! state)
+            tensions (get-in out [:evidence :tensions])
+            pressures (->> tensions
+                           (filter #(= :pre-symbolic-pressure (:tension/type %)))
+                           vec)]
+        (is (seq pressures) "Should observe a pre-symbolic pressure tension from G5 rejections")
+        (is (some #{bad-mission} (:tension/contexts (first pressures)))
+            "Mission-ref should be recovered from rejection details, not left as \"unknown\"")))))
+
+;;; ============================================================
 ;;; Canonicalizer Overwrite Guard Tests (Codex suggestion 2)
 ;;; ============================================================
 

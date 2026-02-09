@@ -52,9 +52,14 @@
   "Extract a rejection entry from a proof-path if last event is in early-gates."
   [pp early-gates]
   (let [path-id (or (:path/id pp) "unknown")
-        mission-ref (get-in pp [:evidence :task-spec :task/mission-ref] "unknown")
         events (get-in pp [:proof-path :events] [])
-        last-event (last events)]
+        last-event (last events)
+        ;; For early-gate rejections (especially G5), TaskSpec may not exist yet.
+        ;; Fall back to rejection details when available.
+        mission-ref (or (get-in pp [:evidence :task-spec :task/mission-ref])
+                        (get-in pp [:evidence :rejection :details :task/mission-ref])
+                        (get-in last-event [:gate/record :details :task/mission-ref])
+                        "unknown")]
     (when (and last-event (early-gates (:gate/id last-event)))
       (let [gate-id (:gate/id last-event)
             err-key (get-in last-event [:gate/record :error/key])
