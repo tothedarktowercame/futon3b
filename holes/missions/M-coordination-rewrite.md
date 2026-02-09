@@ -835,8 +835,7 @@ namespace names and set `:mission/state :active`. Ran `ct/mission.clj`:
 
 ```
 cd /home/joe/code/futon5
-clojure -M -e "(require '[clojure.edn :as edn] '[futon5.ct.mission :as m])\
-  (-> \"data/missions/futon3-coordination.edn\" slurp edn/read-string m/mission-diagram m/validate prn)"
+clojure -M -e "(do (require '[clojure.edn :as edn] '[futon5.ct.mission :as m]) (-> \"data/missions/futon3-coordination.edn\" slurp edn/read-string m/mission-diagram m/validate prn))"
 
 {:all-valid true,
  :checks
