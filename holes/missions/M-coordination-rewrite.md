@@ -511,11 +511,11 @@ Pattern: `futon-theory/retroactive-canonicalization`
 - [x] Reviewer sign-off on code (CP-2: Codex reviewed a78f2fc)
 
 ### Part III (Level 1)
-- [ ] L1-observe produces structured tension observations
-- [ ] L1-canon produces canonization events that update library
-- [ ] Full glacial loop test: accumulate → observe → canonize → updated constraint
-- [ ] I3/I4 checks pass for the two-loop diagram
-- [ ] `ct/mission.clj` validates complete diagram: 8/8 checks pass
+- [x] L1-observe produces structured tension observations (CP-4)
+- [x] L1-canon produces canonization events that update library (CP-4)
+- [x] Full glacial loop test: accumulate → observe → canonize → updated constraint (CP-4: round-trip test)
+- [x] I3/I4 checks pass for the two-loop diagram (CP-4: 8/8 ct/mission.clj)
+- [x] `ct/mission.clj` validates complete diagram: 8/8 checks pass (CP-4)
 
 ### Derivation Requirements
 - [x] Every gate module cites its coordination patterns (2 per gate) (CP-1: ns docstrings)
@@ -856,6 +856,27 @@ clojure -M -e "(do (require '[clojure.edn :as edn] '[futon5.ct.mission :as m]) (
 
 All 12 coordination patterns now include `@theory-grounding [...]`, and an
 end-to-end traceability example is included in this mission doc.
+
+### CP-4: Level 1 — Library Evolution (2026-02-09)
+
+Level 1 glacial loop implemented: tension observer + canonicalizer + composition.
+The concrete diagram now includes both levels and passes all 8 ct/mission.clj checks.
+
+- **Built by:** Claude
+- **Files created:**
+  - `src/futon3/gate/observe.clj` — L1 tension observer (3 scan functions)
+  - `src/futon3/gate/canon.clj` — L1 canonicalizer (Baldwin cycle)
+  - `src/futon3/gate/level1.clj` — L1 composition (observe → canon)
+  - `test/futon3/gate/level1_test.clj` — 10 tests, including full round-trip
+- **Files modified:**
+  - `src/futon3/gate/shapes.clj` — TensionObservation + CanonizationEvent shapes
+  - `src/futon3/gate/errors.clj` — 4 Level 1 error types
+  - `futon5/data/missions/futon3-coordination.edn` — L1 ports, components, edges
+- **Verified:** 27 tests, 88 assertions, 0 failures; ct/mission.clj 8/8 checks pass
+- **Tensions resolved:** E6 (greenfield prototypes), completes E1 + E7
+- **Key test:** `full-loop-round-trip` — gap-PSRs → L1 observe → canonize → new flexiarg → G3 accepts
+
+**Part III is now fully complete.**
 
 ---
 

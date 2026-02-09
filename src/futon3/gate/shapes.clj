@@ -56,10 +56,31 @@
    [:par/prediction-errors {:optional true} [:vector map?]]
    [:par/suggestions {:optional true} [:vector [:string {:min 1}]]]])
 
+(def TensionObservation
+  [:map {:closed true}
+   [:tension/id [:string {:min 1}]]
+   [:tension/type [:enum :structural-irritation :pre-symbolic-pressure :trans-situational-reappearance]]
+   [:tension/evidence-refs [:vector [:string {:min 1}]]]
+   [:tension/frequency :int]
+   [:tension/contexts [:vector [:string {:min 1}]]]
+   [:tension/description [:string {:min 1}]]
+   [:tension/fingerprint [:string {:min 1}]]
+   [:tension/observed-at [:string {:min 1}]]])
+
+(def CanonizationEvent
+  [:map {:closed true}
+   [:canon/id [:string {:min 1}]]
+   [:canon/tension-ref [:string {:min 1}]]
+   [:canon/phase [:enum :naming :selection :canalization]]
+   [:canon/pattern-id [:string {:min 1}]]
+   [:canon/action [:enum :create :update :deprecate]]
+   [:canon/rationale [:string {:min 1}]]
+   [:canon/at [:string {:min 1}]]])
+
 (def ProofPathEvent
   [:map {:closed true}
-   [:gate/id [:enum :g5 :g4 :g3 :g2 :g1 :g0]]
-   [:gate/record [:or TaskSpec Assignment PSR Artifact PUR PAR]]
+   [:gate/id [:enum :g5 :g4 :g3 :g2 :g1 :g0 :l1-observe :l1-canon]]
+   [:gate/record [:or TaskSpec Assignment PSR Artifact PUR PAR TensionObservation CanonizationEvent]]
    [:gate/at [:string {:min 1}]]])
 
 (def ProofPath
