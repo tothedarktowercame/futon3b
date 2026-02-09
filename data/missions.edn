@@ -1,0 +1,11 @@
+;; Mission registry — loaded by G5 for mission-ref resolution.
+;; Each entry maps a mission-ref string to its metadata.
+;; :mission/state must be :active for G5 to accept tasks referencing it.
+
+{"M-coordination-rewrite"
+ {:mission/id "M-coordination-rewrite"
+  :mission/state :active
+  :mission/title "Coordination Rewrite"
+  :mission/doc "holes/missions/M-coordination-rewrite.md"
+  :mission/phases [:phase-0 :phase-1 :phase-2 :phase-3]
+  :mission/current-phase :phase-2}}

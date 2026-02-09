@@ -178,3 +178,36 @@
         (when (seq found)
           (is (= task-id (get-in (first found) [:evidence :task-spec :task/id]))))))))
 
+(deftest g5-resolves-mission-from-registry
+  (testing "G5 resolves mission-ref from data/missions.edn when no I-missions injected"
+    (let [input (-> base-input
+                    (dissoc :I-missions)  ;; force registry lookup
+                    (assoc-in [:I-request :task :task/mission-ref]
+                              "M-coordination-rewrite"))
+          out (pipeline/run input)]
+      (is (true? (:ok out))
+          "Pipeline should succeed — M-coordination-rewrite is :active in missions.edn"))))
+
+(deftest g5-rejects-unknown-mission-from-registry
+  (testing "G5 rejects unknown mission-ref when resolved from registry"
+    (let [input (-> base-input
+                    (dissoc :I-missions)
+                    (assoc-in [:I-request :task :task/mission-ref]
+                              "M-nonexistent-mission"))
+          out (pipeline/run input)]
+      (is (false? (:ok out)))
+      (is (= :g5 (:gate/id out)))
+      (is (= :g5/mission-not-active (:error/key out))))))
+
+(deftest g2-passthrough-artifact
+  (testing "G2 accepts a passthrough artifact when no exec/fn provided"
+    (let [input (-> base-input
+                    (update-in [:I-request] dissoc :exec/fn)
+                    (assoc-in [:I-request :artifact]
+                              {:artifact/type :doc/review
+                               :artifact/ref {:reviewed "AGENTS.md"}
+                               :exec/success? true}))
+          out (pipeline/run input)]
+      (is (true? (:ok out))
+          "Pipeline should succeed with passthrough artifact"))))
+

@@ -18,23 +18,51 @@
       (get-in state [:ports :I-environment :exec/fn])
       (get-in state [:ports :I-request :exec-fn])))
 
+(defn- passthrough-artifact
+  "Extract an explicit artifact from the request for pass-through tasks
+   (documentation, review, etc.) that don't need a real exec function."
+  [state]
+  (or (get-in state [:ports :I-request :artifact])
+      (get-in state [:ports :I-request :payload :artifact])))
+
+(defn- register-artifact
+  "Build and validate an Artifact evidence record."
+  [state artifact elapsed-ms]
+  (let [task (get-in state [:evidence :task-spec])
+        record {:artifact/id (or (:artifact/id artifact) (u/gen-id "artifact"))
+                :artifact/task-id (:task/id task)
+                :artifact/type (or (:artifact/type artifact) :artifact/unknown)
+                :artifact/ref (or (:artifact/ref artifact)
+                                  (dissoc artifact :artifact/id :artifact/type))
+                :artifact/registered-at (u/now-iso)}
+        _ (shapes/validate! shapes/Artifact record)
+        event {:gate/id :g2
+               :gate/record record
+               :gate/at (u/now-iso)}]
+    (-> state
+        (assoc-in [:evidence :artifact] record)
+        (assoc-in [:evidence :exec/outcome] (assoc artifact :exec/elapsed-ms elapsed-ms))
+        (update :proof-path (fnil conj []) event)
+        (assoc :result {:ok true}))))
+
 (defn apply!
   "Run bounded execution and register an Artifact record.
 
-  The actual side effects are delegated to an injected exec fn for Prototype 0.
-  Later, this gate will compose:
-  - futon3 check DSL
-  - futon3a sidecar.store proposal pipeline
-  - futon3a meme.arrow typed edge creation"
+  Two execution modes:
+  1. Injected exec/fn — called with task/assignment/psr/environment context,
+     must return a map with artifact data. Subject to budget enforcement.
+  2. Pass-through — if no exec/fn but an :artifact map is in the request,
+     register it directly. For documentation, review, or pre-completed tasks."
   [state]
   (let [task (get-in state [:evidence :task-spec])
         assignment (get-in state [:evidence :assignment])
         psr (get-in state [:evidence :psr])
         env (get-in state [:ports :I-environment])
-        f (exec-fn state)]
-    (if-not (fn? f)
-      (assoc state :result (errors/reject :g2/artifact-unregistered
-                                          {:reason "no exec function configured"}))
+        f (exec-fn state)
+        pt (passthrough-artifact state)]
+    (cond
+      ;; Mode 1: injected exec function
+      (fn? f)
       (let [start (System/nanoTime)
             timeout (budget-ms state)
             outcome (try
@@ -74,18 +102,13 @@
               (assoc state :result (errors/reject :g2/artifact-unregistered
                                                   {:reason "exec did not return an artifact map"
                                                    :elapsed/ms elapsed-ms}))
-              (let [record {:artifact/id (or (:artifact/id artifact) (u/gen-id "artifact"))
-                            :artifact/task-id (:task/id task)
-                            :artifact/type (or (:artifact/type artifact) :artifact/unknown)
-                            :artifact/ref (or (:artifact/ref artifact)
-                                              (dissoc artifact :artifact/id :artifact/type))
-                            :artifact/registered-at (u/now-iso)}
-                    _ (shapes/validate! shapes/Artifact record)
-                    event {:gate/id :g2
-                           :gate/record record
-                           :gate/at (u/now-iso)}]
-                (-> state
-                    (assoc-in [:evidence :artifact] record)
-                    (assoc-in [:evidence :exec/outcome] (assoc artifact :exec/elapsed-ms elapsed-ms))
-                    (update :proof-path (fnil conj []) event)
-                    (assoc :result {:ok true}))))))))))
+              (register-artifact state artifact elapsed-ms)))))
+
+      ;; Mode 2: pass-through artifact
+      (map? pt)
+      (register-artifact state pt 0.0)
+
+      ;; No exec and no passthrough
+      :else
+      (assoc state :result (errors/reject :g2/artifact-unregistered
+                                          {:reason "no exec function or passthrough artifact configured"})))))

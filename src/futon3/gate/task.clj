@@ -6,7 +6,8 @@
   - coordination/intent-to-mission-binding"
   (:require [futon3.gate.errors :as errors]
             [futon3.gate.shapes :as shapes]
-            [futon3.gate.util :as u]))
+            [futon3.gate.util :as u]
+            [futon3b.query.relations :as relations]))
 
 (defn- mission-active?
   [missions mission-ref]
@@ -24,7 +25,8 @@
   (let [task (or (get-in state [:ports :I-request :task])
                  (get-in state [:ports :I-request :payload :task]))
         mission-ref (:task/mission-ref task)
-        missions (or (get-in state [:ports :I-missions]) {})]
+        missions (or (not-empty (get-in state [:ports :I-missions]))
+                     (relations/load-missions))]
     (cond
       (u/blankish? mission-ref)
       (assoc state :result (errors/reject :g5/missing-mission-ref

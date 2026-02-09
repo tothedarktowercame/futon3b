@@ -337,6 +337,28 @@
   (into #{} (map :pattern-id) (load-patterns)))
 
 ;;; ============================================================
+;;; Mission Registry
+;;; ============================================================
+
+(def ^:private default-missions-file
+  (str (System/getProperty "user.home") "/code/futon3b/data/missions.edn"))
+
+(defn missions-file
+  "Path to the missions EDN registry. Override with FUTON_MISSIONS_FILE."
+  []
+  (or (System/getenv "FUTON_MISSIONS_FILE")
+      default-missions-file))
+
+(defn load-missions
+  "Load missions from the EDN registry file.
+   Returns a map of mission-ref → mission metadata."
+  []
+  (let [f (io/file (missions-file))]
+    (if (.exists f)
+      (read-string (slurp f))
+      {})))
+
+;;; ============================================================
 ;;; Proof Path Store
 ;;; ============================================================
 
