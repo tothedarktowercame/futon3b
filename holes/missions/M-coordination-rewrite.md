@@ -835,19 +835,20 @@ namespace names and set `:mission/state :active`. Ran `ct/mission.clj`:
 
 ```
 cd /home/joe/code/futon5
-clojure -M -m futon5.ct.mission \
-  data/missions/coordination-exotype.edn \
-  data/missions/futon3-coordination.edn
+clojure -M -e "(require '[clojure.edn :as edn] '[futon5.ct.mission :as m])\
+  (-> \"data/missions/futon3-coordination.edn\" slurp edn/read-string m/mission-diagram m/validate prn)"
 
-[PASS] completeness
-[PASS] coverage
-[PASS] orphans
-[PASS] type-safety
-[PASS] spec-coverage
-[PASS] I3-timescale-separation
-[PASS] I4-preference-exogeneity
-[PASS] I6-compositional-closure
-Overall: PASS (profile=:prototype0 required-levels=#{:L0})
+{:all-valid true,
+ :checks
+ [{:valid true, :check :completeness}
+  {:valid true, :check :coverage}
+  {:valid true, :check :no-orphan-inputs}
+  {:valid true, :check :type-safety}
+  {:valid true, :check :spec-coverage}
+  {:valid true, :check :timescale-ordering}
+  {:valid true, :check :exogeneity}
+  {:valid true, :check :compositional-closure}],
+ :mission/id :futon3-coordination}
 ```
 
 8/8 checks pass. **Part II is now fully complete.**
