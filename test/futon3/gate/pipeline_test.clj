@@ -1,5 +1,6 @@
 (ns futon3.gate.pipeline-test
   (:require [clojure.test :refer [deftest is testing use-fixtures]]
+            [clojure.edn :as edn]
             [clojure.java.io :as io]
             [futon3.gate.pipeline :as pipeline]
             [futon3b.query.relations :as relations]))
@@ -105,25 +106,49 @@
 
 ;; Use a temp dir for proof-paths so tests don't pollute real data.
 (def ^:dynamic *test-proof-dir* nil)
+(def ^:dynamic *test-library-dir* nil)
+(def ^:dynamic *test-missions-file* nil)
 
 (defn with-temp-proof-dir [f]
   (let [dir (io/file (System/getProperty "java.io.tmpdir")
-                     (str "futon3b-test-" (System/nanoTime)))]
+                     (str "futon3b-proof-" (System/nanoTime)))
+        lib (io/file (System/getProperty "java.io.tmpdir")
+                     (str "futon3b-lib-" (System/nanoTime)))
+        missions (io/file (System/getProperty "java.io.tmpdir")
+                          (str "futon3b-missions-" (System/nanoTime) ".edn"))]
     (.mkdirs dir)
+    (.mkdirs lib)
     (try
-      (with-redefs [relations/proof-path-dir (constantly (str dir))]
-        (binding [*test-proof-dir* dir]
+      ;; Minimal hermetic pattern library.
+      (let [coord (io/file lib "coordination")]
+        (.mkdirs coord)
+        (spit (io/file coord "mandatory-psr.flexiarg")
+              (str "@flexiarg coordination/mandatory-psr\n"
+                   "@title Mandatory PSR (Test Fixture)\n"
+                   "! conclusion:\n  ok\n")))
+      ;; Hermetic missions registry.
+      (spit missions
+            (pr-str {"M-coordination-rewrite"
+                     {:mission/id "M-coordination-rewrite"
+                      :mission/state :active}}))
+      (with-redefs [relations/proof-path-dir (constantly (str dir))
+                    relations/library-roots (constantly [(str lib)])
+                    relations/missions-file (constantly (str missions))]
+        (binding [*test-proof-dir* dir
+                  *test-library-dir* lib
+                  *test-missions-file* missions]
           (f)))
       (finally
         ;; Clean up
-        (doseq [f (reverse (file-seq dir))]
-          (.delete f))))))
+        (doseq [f (reverse (file-seq dir))] (.delete f))
+        (doseq [f (reverse (file-seq lib))] (.delete f))
+        (.delete missions)))))
 
 (use-fixtures :each with-temp-proof-dir)
 
 (deftest g3-resolves-real-pattern
   (testing "G3 checks the real pattern library when no I-patterns set provided"
-    ;; Use a pattern we know exists in the library
+    ;; Uses hermetic fixture library via relations/library-roots override.
     (let [real-pattern "coordination/mandatory-psr"
           input (-> base-input
                     (dissoc :I-patterns)  ;; no injected set — force library lookup
@@ -158,7 +183,7 @@
         (is (= 1 (count files))
             "Exactly one proof-path EDN file should be written")
         (when (seq files)
-          (let [content (read-string (slurp (first files)))]
+          (let [content (edn/read-string (slurp (first files)))]
             (is (= (get-in out [:O-proof-path :path/id]) (:path/id content)))
             (is (= 6 (count (get-in content [:proof-path :events]))))
             (is (some? (:persisted-at content)))))))))
@@ -210,4 +235,3 @@
           out (pipeline/run input)]
       (is (true? (:ok out))
           "Pipeline should succeed with passthrough artifact"))))
-

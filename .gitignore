@@ -1,6 +1,8 @@
 .cpcache/
 .lsp/
+.clj-kondo/
 .clj-kondo/.cache/
 .nrepl-port
 target/
 out/
+data/proof-paths/

@@ -12,6 +12,7 @@
 
    This namespace is the LOGIC leg."
   (:require [clojure.core.logic :as l]
+            [clojure.edn :as edn]
             [clojure.java.io :as io]
             [clojure.string :as str]
             [futon3b.query.transcript :as transcript]))
@@ -21,8 +22,9 @@
 ;;; ============================================================
 
 (def ^:private default-library-roots
-  [(str (System/getProperty "user.home") "/code/futon3b/library")
-   (str (System/getProperty "user.home") "/code/futon3/library")])
+  ;; Prefer repo-local patterns, fall back to legacy futon3 library checkout.
+  [(str (io/file (System/getProperty "user.dir") "library"))
+   (str (io/file (System/getProperty "user.home") "code" "futon3" "library"))])
 
 (defn library-roots
   "Pattern library roots, searched in order.
@@ -341,7 +343,7 @@
 ;;; ============================================================
 
 (def ^:private default-missions-file
-  (str (System/getProperty "user.home") "/code/futon3b/data/missions.edn"))
+  (str (io/file (System/getProperty "user.dir") "data" "missions.edn")))
 
 (defn missions-file
   "Path to the missions EDN registry. Override with FUTON_MISSIONS_FILE."
@@ -355,7 +357,7 @@
   []
   (let [f (io/file (missions-file))]
     (if (.exists f)
-      (read-string (slurp f))
+      (edn/read-string (slurp f))
       {})))
 
 ;;; ============================================================
@@ -363,7 +365,7 @@
 ;;; ============================================================
 
 (def ^:private default-proof-path-dir
-  (str (System/getProperty "user.home") "/code/futon3b/data/proof-paths"))
+  (str (io/file (System/getProperty "user.dir") "data" "proof-paths")))
 
 (defn proof-path-dir
   "Directory for proof-path EDN files. Override with FUTON_PROOF_PATH_DIR."
@@ -397,7 +399,7 @@
            (filter #(str/ends-with? (.getName %) ".edn"))
            (map (fn [f]
                   (try
-                    (read-string (slurp f))
+                    (edn/read-string (slurp f))
                     (catch Exception _ nil))))
            (remove nil?)))))
 
