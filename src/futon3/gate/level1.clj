@@ -1,6 +1,10 @@
 (ns futon3.gate.level1
   "Level 1 glacial loop composition: L1-observe → L1-canon.
 
+  Patterns:
+  - futon-theory/structural-tension-as-observation (via observe.clj)
+  - futon-theory/retroactive-canonicalization (via canon.clj)
+
   Analogous to how pipeline.clj composes G5→G0 for Level 0.
   The glacial loop watches Level 0 proof-paths for recurring tensions
   and evolves the pattern library."

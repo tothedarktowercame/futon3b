@@ -1,13 +1,16 @@
 (ns futon3.gate.canon
   "L1-canon: canonicalize observed tensions into library patterns.
 
-  Three-step Baldwin cycle from futon-theory/retroactive-canonicalization:
+  Patterns:
+  - futon-theory/retroactive-canonicalization
+
+  Theory grounding: [A3(Evidence-driven) I5(Model-adequacy)]
+
+  Three-step Baldwin cycle from retroactive-canonicalization:
 
   1. NAMING    — recurring practice gets a stable name
   2. SELECTION — named practice shows trans-situational reappearance
-  3. CANALIZATION — selected practice constrains future work
-
-  Theory grounding: [A3(Evidence-driven) I5(Model-adequacy)]"
+  3. CANALIZATION — selected practice constrains future work"
   (:require [futon3.gate.errors :as errors]
             [futon3.gate.shapes :as shapes]
             [futon3.gate.util :as u]

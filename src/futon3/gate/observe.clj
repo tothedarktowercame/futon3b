@@ -1,14 +1,17 @@
 (ns futon3.gate.observe
   "L1-observe: tension observer for the glacial loop.
 
+  Patterns:
+  - futon-theory/structural-tension-as-observation
+
+  Theory grounding: [I2(Observation-action-asymmetry) I5(Model-adequacy)]
+
   Scans accumulated proof-paths for recurring structural tensions using
-  three criteria from futon-theory/structural-tension-as-observation:
+  three criteria from structural-tension-as-observation:
 
   1. Structural irritation — recurring gap-PSRs
   2. Pre-symbolic pressure — repeated early-gate failures
-  3. Trans-situational reappearance — same pattern across contexts
-
-  Theory grounding: [I2(Observation-action-asymmetry) I5(Model-adequacy)]"
+  3. Trans-situational reappearance — same pattern across contexts"
   (:require [futon3.gate.errors :as errors]
             [futon3.gate.shapes :as shapes]
             [futon3.gate.util :as u]
