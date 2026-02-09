@@ -497,7 +497,7 @@ Pattern: `futon-theory/retroactive-canonicalization`
 - [ ] Evidence shape catalog defines all inter-gate record types (§1.2)
 - [ ] Theory grounding covers all 5 axioms and 6 invariants (§1.3)
 - [ ] Traceability from devmap → pattern → exotype → gate → test → evidence → error
-- [ ] PSR/PUR exemplar exists
+- [x] PSR/PUR exemplar exists (`holes/labs/coordination/psr/` + `holes/labs/coordination/pur/`)
 - [ ] Reviewer sign-off on Part I artifacts
 
 ### Part II (Product)

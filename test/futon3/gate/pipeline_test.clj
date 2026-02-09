@@ -2,6 +2,7 @@
   (:require [clojure.test :refer [deftest is testing use-fixtures]]
             [clojure.edn :as edn]
             [clojure.java.io :as io]
+            [clojure.string :as str]
             [futon3.gate.pipeline :as pipeline]
             [futon3b.query.relations :as relations]))
 
@@ -179,7 +180,7 @@
       (is (string? (get-in out [:O-proof-path :path/id])))
       ;; Verify the file was written
       (let [files (->> (file-seq *test-proof-dir*)
-                       (filter #(clojure.string/ends-with? (.getName %) ".edn")))]
+                       (filter #(str/ends-with? (.getName %) ".edn")))]
         (is (= 1 (count files))
             "Exactly one proof-path EDN file should be written")
         (when (seq files)

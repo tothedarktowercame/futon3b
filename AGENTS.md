@@ -27,6 +27,8 @@ data/missions.edn                  — mission registry (loaded by G5)
 data/proof-paths/                  — durable proof-path EDN files (written by G0)
 deps.edn                           — core.logic, XTDB, SQLite, Malli, data.json
 library/coordination/              — 12 coordination pattern flexiargs (local copies)
+holes/labs/coordination/psr/       — PSR exemplars (process artifacts)
+holes/labs/coordination/pur/       — PUR exemplars (process artifacts)
 ```
 
 The pattern library lives at `~/code/futon3/library/` and `~/code/futon3b/library/`.
