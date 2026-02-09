@@ -507,7 +507,7 @@ Pattern: `futon-theory/retroactive-canonicalization`
 - [x] Pipeline test: first failing gate short-circuits, error carries gate id (CP-1)
 - [x] Evidence shapes validate against specs (CP-1: Malli validation at each gate)
 - [x] PSR→PUR→PAR chain tested end-to-end (CP-2: round-trip proof-path test)
-- [ ] `ct/mission.clj` validates concrete instantiation: 8/8 checks pass
+- [x] `ct/mission.clj` validates concrete instantiation: 8/8 checks pass (CP-2b)
 - [x] Reviewer sign-off on code (CP-2: Codex reviewed a78f2fc)
 
 ### Part III (Level 1)
@@ -785,6 +785,26 @@ actual stores; pipeline produces durable evidence.
   - Mission registry (`data/missions.edn`)
 - **Verified:** 17 tests, 54 assertions, 0 failures, 0 errors
 - **Tensions resolved:** E2, E3, E4, E5. Partial: E1, E7. Remaining: E6
+
+### CP-2b: Exotype Validation (2025-02-08)
+
+Updated `futon5/data/missions/futon3-coordination.edn` to match actual
+namespace names and set `:mission/state :active`. Ran `ct/mission.clj`:
+
+```
+{:all-valid true,
+ :checks
+ [{:valid true, :check :completeness}
+  {:valid true, :check :coverage}
+  {:valid true, :check :no-orphan-inputs}
+  {:valid true, :check :type-safety}
+  {:valid true, :check :spec-coverage}
+  {:valid true, :check :timescale-ordering}
+  {:valid true, :check :exogeneity}
+  {:valid true, :check :compositional-closure}]}
+```
+
+8/8 checks pass. **Part II is now fully complete.**
 
 ---
 
