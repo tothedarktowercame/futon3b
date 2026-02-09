@@ -1,7 +1,7 @@
 (ns futon3.gate.level1-test
   (:require [clojure.test :refer [deftest is testing use-fixtures]]
             [clojure.java.io :as io]
-            [clojure.edn :as edn]
+            [clojure.string :as str]
             [futon3.gate.observe :as observe]
             [futon3.gate.canon :as canon]
             [futon3.gate.level1 :as level1]
@@ -180,15 +180,15 @@
                    :tension/type :structural-irritation
                    :tension/evidence-refs ["path-1" "path-2" "path-3"]
                    :tension/frequency 3
-                   :tension/contexts ["M-coordination-rewrite" "M-other"]
-                   :tension/description "Recurring gap: deployment validation"
-                   :tension/fingerprint "no pattern for deployment validation"
-                   :tension/observed-at (str (java.time.Instant/now))}
-          naming (canon/name-tension tension)]
-      (is (= :naming (:canon/phase naming)))
-      (is (string? (:canon/pattern-id naming)))
-      (is (clojure.string/starts-with? (:canon/pattern-id naming) "coordination/"))
-      (is (= "tension-test-1" (:canon/tension-ref naming))))))
+                     :tension/contexts ["M-coordination-rewrite" "M-other"]
+                     :tension/description "Recurring gap: deployment validation"
+                     :tension/fingerprint "no pattern for deployment validation"
+                     :tension/observed-at (str (java.time.Instant/now))}
+            naming (canon/name-tension tension)]
+        (is (= :naming (:canon/phase naming)))
+        (is (string? (:canon/pattern-id naming)))
+        (is (str/starts-with? (:canon/pattern-id naming) "coordination/"))
+        (is (= "tension-test-1" (:canon/tension-ref naming))))))
 
 (deftest canonicalizer-selects-by-threshold
   (testing "Below-threshold tension filtered out"
@@ -233,108 +233,113 @@
           selection (canon/select-candidate tension naming {})
           _ (is (some? selection) "Should be selected")
           canalization (canon/canalize! tension selection)]
-      (is (= :canalization (:canon/phase canalization)))
-      ;; Verify file was written
-      (let [pattern-id (:canon/pattern-id selection)
-            parts (clojure.string/split pattern-id #"/")
-            dir-name (first parts)
-            file-name (str (last parts) ".flexiarg")
-            written-file (io/file *test-library-dir* dir-name file-name)]
-        (is (.exists written-file)
-            (str "Flexiarg file should exist at " written-file))
-        (when (.exists written-file)
-          (let [content (slurp written-file)]
-            (is (clojure.string/includes? content "@flexiarg"))
-            (is (clojure.string/includes? content "deployment validation"))))))))
+        (is (= :canalization (:canon/phase canalization)))
+        ;; Verify file was written
+        (let [pattern-id (:canon/pattern-id selection)
+              parts (str/split pattern-id #"/")
+              dir-name (first parts)
+              file-name (str (last parts) ".flexiarg")
+              written-file (io/file *test-library-dir* dir-name file-name)]
+          (is (.exists written-file)
+              (str "Flexiarg file should exist at " written-file))
+          (when (.exists written-file)
+            (let [content (slurp written-file)]
+              (is (str/includes? content "@flexiarg"))
+              (is (str/includes? content "deployment validation"))))))))
 
 ;;; ============================================================
 ;;; Full Loop Tests
 ;;; ============================================================
 
 (deftest full-loop-round-trip
-  (testing "Integration: gap-PSRs → observe → canonize → new flexiarg → G3 accepts"
+  (testing "Integration: gap-PSRs → observe → canonize (required) → new flexiarg → G3 accepts"
     ;; Step 1: Create proof-paths with recurring gap-PSRs via the pipeline
     (let [ok-exec (fn [_] {:artifact/type :demo/artifact :artifact/ref {:demo "ok"} :exec/success? true})
           ok-sink (fn [{:keys [proof-path]}] {:ok true :path/id (:path/id proof-path)})
           base-input {:I-missions {"M-coordination-rewrite"
                                    {:mission/id "M-coordination-rewrite"
+                                    :mission/state :active}
+                                   "M-other-mission"
+                                   {:mission/id "M-other-mission"
                                     :mission/state :active}}
                       :I-patterns {:patterns/ids #{"coordination/mandatory-psr"}}
                       :I-registry {:agents {"codex-1" {:capabilities [:coordination/execute :coordination/review]}}}
                       :I-environment {}
-                      :opts {:budget/ms 200}}]
+                      :opts {:budget/ms 200}}
 
-      ;; Create 3 proof-paths with gap-PSRs (via pipeline with gap declaration)
-      (let [gap-paths (vec
-                        (for [i (range 3)]
-                          (let [task-id (str "T-gap-" i)
-                                out (pipeline/run
-                                      (assoc base-input
-                                        :I-request {:task {:task/id task-id
-                                                           :task/mission-ref "M-coordination-rewrite"
-                                                           :task/intent "deploy validation"
-                                                           :task/success-criteria [:demo/ok]
-                                                           :task/required-capabilities [:coordination/execute]}
-                                                     :agent-id "codex-1"
-                                                     :psr {:psr/type :gap
-                                                           :gap? true
-                                                           :psr/rationale "No pattern for deployment validation"}
-                                                     :exec/fn ok-exec
-                                                     :par {:par/session-ref (str "S-gap-" i)
-                                                           :par/what-worked "partial"
-                                                           :par/what-didnt "no matching pattern"
-                                                           :par/prediction-errors []
-                                                           :par/suggestions []}
-                                                     :evidence/sink ok-sink}))]
-                            (is (true? (:ok out)) (str "Pipeline should succeed for gap " i))
-                            ;; Build proof-path data as if loaded from store
-                            {:path/id (get-in out [:O-proof-path :path/id])
-                             :proof-path (:O-proof-path out)
-                             :evidence (:O-evidence out)
-                             :persisted-at (str (java.time.Instant/now))})))]
+          ;; Create 3 proof-paths with gap-PSRs across 2 mission contexts so
+          ;; the canonicalizer selection threshold (contexts>=2, freq>=3) is met.
+          gap-paths (vec
+                      (for [i (range 3)]
+                        (let [task-id (str "T-gap-" i)
+                              mission-ref (if (zero? (mod i 2)) "M-coordination-rewrite" "M-other-mission")
+                              out (pipeline/run
+                                    (assoc base-input
+                                      :I-request {:task {:task/id task-id
+                                                         :task/mission-ref mission-ref
+                                                         :task/intent "deploy validation"
+                                                         :task/success-criteria [:demo/ok]
+                                                         :task/required-capabilities [:coordination/execute]}
+                                                   :agent-id "codex-1"
+                                                   :psr {:psr/type :gap
+                                                         :gap? true
+                                                         :psr/rationale "No pattern for deployment validation"}
+                                                   :exec/fn ok-exec
+                                                   :par {:par/session-ref (str "S-gap-" i)
+                                                         :par/what-worked "partial"
+                                                         :par/what-didnt "no matching pattern"
+                                                         :par/prediction-errors []
+                                                         :par/suggestions []}
+                                                   :evidence/sink ok-sink}))]
+                          (is (true? (:ok out)) (str "Pipeline should succeed for gap " i))
+                          ;; Build proof-path data as if loaded from store
+                          {:path/id (get-in out [:O-proof-path :path/id])
+                           :proof-path (:O-proof-path out)
+                           :evidence (:O-evidence out)
+                           :persisted-at (str (java.time.Instant/now))})))
+          ;; Step 2: Run L1 with these proof-paths
+          l1-result (level1/run {:I-tensions gap-paths
+                                 :I-patterns {}
+                                 :opts {}})]
+      (is (true? (:ok l1-result))
+          "L1 should succeed")
+      (is (pos? (count (:observations l1-result)))
+          "Should find at least one tension")
 
-        ;; Step 2: Run L1 with these proof-paths
-        (let [l1-result (level1/run {:I-tensions gap-paths
-                                     :I-patterns {}
-                                     :opts {:min-frequency 2}})]
-          (is (true? (:ok l1-result))
-              "L1 should succeed")
-          (is (pos? (count (:observations l1-result)))
-              "Should find at least one tension")
+      ;; Step 3: Canonization must happen and produce at least one canalization event.
+      (let [canalizations (->> (:canonizations l1-result)
+                               (filter #(= :canalization (:canon/phase %)))
+                               vec)]
+        (is (seq canalizations) "L1 should canalize at least one new pattern.")
+        (let [new-pattern-id (:canon/pattern-id (first canalizations))]
+          (is (string? new-pattern-id))
+          ;; Verify G3 can now find the new pattern
+          (relations/invalidate-pattern-cache!)
+          (is (relations/pattern-exists? new-pattern-id)
+              (str "New pattern " new-pattern-id " should exist in library"))
 
-          ;; Step 3: If canonization happened, verify the new pattern exists
-          (when (seq (:canonizations l1-result))
-            (let [canon-events (->> (:canonizations l1-result)
-                                    (filter #(= :canalization (:canon/phase %))))
-                  new-pattern-id (:canon/pattern-id (first canon-events))]
-              (when new-pattern-id
-                ;; Verify G3 can now find the new pattern
-                (relations/invalidate-pattern-cache!)
-                (is (relations/pattern-exists? new-pattern-id)
-                    (str "New pattern " new-pattern-id " should exist in library"))
-
-                ;; Step 4: Run pipeline with the new pattern
-                (let [out (pipeline/run
-                            (assoc base-input
-                              :I-patterns nil  ;; force real library lookup
-                              :I-request {:task {:task/id "T-uses-new-pattern"
-                                                 :task/mission-ref "M-coordination-rewrite"
-                                                 :task/intent "deploy with new pattern"
-                                                 :task/success-criteria [:demo/ok]
-                                                 :task/required-capabilities [:coordination/execute]}
-                                           :agent-id "codex-1"
-                                           :psr {:psr/type :selection
-                                                 :psr/pattern-ref new-pattern-id
-                                                 :psr/rationale "Using canonized pattern"}
-                                           :exec/fn ok-exec
-                                           :par {:par/session-ref "S-new-pattern"
-                                                 :par/what-worked "Used new pattern"
-                                                 :par/what-didnt "n/a"
-                                                 :par/prediction-errors []
-                                                 :par/suggestions []}
-                                           :evidence/sink ok-sink}))]
-                  (is (true? (:ok out))
-                      (str "Pipeline should succeed with new pattern " new-pattern-id)))))))))))
+          ;; Step 4: Run pipeline with the new pattern (force real library lookup)
+          (let [out (pipeline/run
+                      (assoc base-input
+                        :I-patterns nil
+                        :I-request {:task {:task/id "T-uses-new-pattern"
+                                           :task/mission-ref "M-coordination-rewrite"
+                                           :task/intent "deploy with new pattern"
+                                           :task/success-criteria [:demo/ok]
+                                           :task/required-capabilities [:coordination/execute]}
+                                   :agent-id "codex-1"
+                                   :psr {:psr/type :selection
+                                         :psr/pattern-ref new-pattern-id
+                                         :psr/rationale "Using canonized pattern"}
+                                   :exec/fn ok-exec
+                                   :par {:par/session-ref "S-new-pattern"
+                                         :par/what-worked "Used new pattern"
+                                         :par/what-didnt "n/a"
+                                         :par/prediction-errors []
+                                         :par/suggestions []}
+                                   :evidence/sink ok-sink}))]
+      (is (true? (:ok out))
+          (str "Pipeline should succeed with new pattern " new-pattern-id))))))))
 
 ;;; ============================================================
 ;;; Shape Validation Tests

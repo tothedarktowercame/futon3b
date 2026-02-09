@@ -180,10 +180,15 @@
             pressures (scan-pre-symbolic-pressure proof-paths opts)
             trans-sit (scan-trans-situational proof-paths opts)
             all-tensions (vec (concat irritations pressures trans-sit))
-            event {:gate/id :l1-observe
-                   :gate/record {:tensions (count all-tensions)}
-                   :gate/at (u/now-iso)}]
+            ;; Proof-path events must carry typed evidence records (see shapes/ProofPathEvent).
+            ;; Record each tension as its own event rather than emitting a summary map.
+            observed-at (u/now-iso)
+            events (mapv (fn [t]
+                           {:gate/id :l1-observe
+                            :gate/record t
+                            :gate/at observed-at})
+                         all-tensions)]
         (-> state
             (assoc-in [:evidence :tensions] all-tensions)
-            (update :proof-path (fnil conj []) event)
+            (update :proof-path (fnil into []) events)
             (assoc :result {:ok true :tensions all-tensions}))))))

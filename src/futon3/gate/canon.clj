@@ -168,13 +168,18 @@
                               (mapv :naming (:canonizations results))
                               (mapv :selection (:canonizations results))
                               canon-events))
-            event {:gate/id :l1-canon
-                   :gate/record {:canonizations (count canon-events)}
-                   :gate/at (u/now-iso)}]
+            ;; Proof-path events must carry typed evidence records (see shapes/ProofPathEvent).
+            ;; Record each canonization event rather than emitting a summary map.
+            canon-at (u/now-iso)
+            events (mapv (fn [e]
+                           {:gate/id :l1-canon
+                            :gate/record e
+                            :gate/at canon-at})
+                         all-events)]
         (if (and (empty? canon-events) (seq (:errors results)))
           (assoc state :result (errors/reject :l1/write-failed
                                               {:errors (:errors results)}))
           (-> state
               (assoc-in [:evidence :canonizations] all-events)
-              (update :proof-path (fnil conj []) event)
+              (update :proof-path (fnil into []) events)
               (assoc :result {:ok true :canonizations all-events})))))))
