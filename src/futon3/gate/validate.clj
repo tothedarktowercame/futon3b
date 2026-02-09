@@ -47,21 +47,17 @@
                  :pur/outcome (if passed? :pass :fail)
                  :pur/criteria-eval (dissoc criteria-eval :passed?)
                  :pur/prediction-error (:prediction-error criteria-eval)}]
-        (try
-          (shapes/validate! shapes/PUR pur)
-          (catch Exception e
-            (assoc state :result (errors/reject :g1/no-pur {:reason "invalid PUR shape"
-                                                           :details (ex-data e)}))))
-        (if-not passed?
-          (-> state
-              (assoc-in [:evidence :pur] pur)
-              (update :proof-path (fnil conj []) {:gate/id :g1 :gate/record pur :gate/at (u/now-iso)})
-              (assoc :result (errors/reject :g1/criteria-not-met
-                                            {:task/id (:task/id task)
-                                             :pur pur
-                                             :artifact/id (:artifact/id artifact)})))
-          (-> state
-              (assoc-in [:evidence :pur] pur)
-              (update :proof-path (fnil conj []) {:gate/id :g1 :gate/record pur :gate/at (u/now-iso)})
-              (assoc :result {:ok true})))))))
+        (if-not (try (shapes/validate! shapes/PUR pur) true
+                     (catch Exception _ false))
+          (assoc state :result (errors/reject :g1/no-pur {:reason "invalid PUR shape"
+                                                          :pur pur}))
+          (let [state' (-> state
+                           (assoc-in [:evidence :pur] pur)
+                           (update :proof-path (fnil conj []) {:gate/id :g1 :gate/record pur :gate/at (u/now-iso)}))]
+            (if-not passed?
+              (assoc state' :result (errors/reject :g1/criteria-not-met
+                                                   {:task/id (:task/id task)
+                                                    :pur pur
+                                                    :artifact/id (:artifact/id artifact)}))
+              (assoc state' :result {:ok true}))))))))
 

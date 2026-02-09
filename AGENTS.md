@@ -9,16 +9,29 @@ it for context, but work from the phases below.
 ```
 src/futon3b/query/transcript.clj   — session transcript search (JSONL files)
 src/futon3b/query/relations.clj    — core.logic relations over transcripts + patterns
-deps.edn                           — core.logic, XTDB, SQLite, data.json
+src/futon3/gate/task.clj           — G5 task specification gate
+src/futon3/gate/auth.clj           — G4 agent authorization gate
+src/futon3/gate/pattern.clj        — G3 pattern reference gate
+src/futon3/gate/exec.clj           — G2 execution gate
+src/futon3/gate/validate.clj       — G1 validation gate
+src/futon3/gate/evidence.clj       — G0 evidence durability gate
+src/futon3/gate/pipeline.clj       — G5→G0 composition
+src/futon3/gate/shapes.clj         — evidence shape specs (Malli)
+src/futon3/gate/errors.clj         — gate rejection catalog
+src/futon3/gate/util.clj           — ID generation, timestamps
+src/futon3/gate/default.clj        — C-default stub
+test/futon3/gate/pipeline_test.clj — 8 tests: per-gate rejection + happy path
+test/futon3b/query/relations_test.clj  — query layer tests
+test/futon3b/query/transcript_test.clj — transcript search tests
+deps.edn                           — core.logic, XTDB, SQLite, Malli, data.json
+library/coordination/              — 12 coordination pattern flexiargs (local copies)
 ```
-
-These implement **Prototype 0** (unified search). They work:
-- `(relations/search "PlanetMath")` returns hits from transcripts + pattern library
-- `(relations/session-count)` → ~820 sessions
-- `(relations/pattern-count)` → ~690 patterns
 
 The pattern library lives at `~/code/futon3/library/` and `~/code/futon3b/library/`.
 Session transcripts live at `~/.claude/projects/`.
+
+**Note:** Gate namespaces use `futon3.gate.*` (per mission §2.1), not `futon3b.gate.*`.
+The `deps.edn` has a local dep on `../futon3a` for future store composition.
 
 ## Argument Traceability
 
@@ -29,9 +42,9 @@ the corresponding tensions move from "on paper" to "in code."
 | ID | Tension | Status |
 |----|---------|--------|
 | E1 | Pattern store disconnected from phylogeny | on paper |
-| E2 | Checks don't enforce pattern selection | on paper |
-| E3 | Trails lack typed evidence | on paper |
-| E4 | Workday input unvalidated | on paper |
+| E2 | Checks don't enforce pattern selection | **scaffold** (G3 rejects missing PSR; not yet wired to real store) |
+| E3 | Trails lack typed evidence | **scaffold** (6 evidence shapes defined + validated via Malli) |
+| E4 | Workday input unvalidated | **scaffold** (G5 validates task shape, mission-ref, criteria) |
 | E5 | Search not wired to pipeline | **partial** (Prototype 0 search works, not yet wired to gates) |
 | E6 | Greenfield prototypes stalled | on paper |
 | E7 | Graph convergence unexploited | on paper |
@@ -58,164 +71,149 @@ library via core.logic relations.
 
 ---
 
-## Phase 1: Gate Scaffold [CURRENT]
+## Phase 1: Gate Scaffold [DONE]
 
-**Goal:** Create the namespace structure for all six gates, the evidence shape
-specs, and the error catalog. Every gate should exist as a stub that validates
-its input shape and rejects malformed input with a typed error. The pipeline
-should compose all six gates in order.
+**Built by:** Codex (commits f0daac7, 395fd67)
+**Reviewed by:** Claude (this session)
+**Bug fixed:** validate.clj shape-validation bypass (lines 50-54)
 
-This is the "all gates rejecting malformed input" half of the Prototype 0 exit
-condition in the mission doc (§2.6 items 1-4).
+### What Was Built
+
+Codex delivered the full gate scaffold: 6 gate namespaces, pipeline composition,
+evidence shapes (Malli), error catalog (14 types), utility namespace, and
+pipeline integration tests (8 tests, 36 assertions). Also created local copies
+of 12 coordination pattern flexiargs and added query layer tests.
+
+### Verification Results
+
+```
+clj -X:test → 10 tests, 36 assertions, 0 failures, 0 errors
+```
+
+**Acceptance checklist:**
+
+- [x] Each gate rejects malformed input with a typed error from errors.clj
+- [x] Each error carries `:gate/id` attribution (Codex used `:gate/id` not `:error/gate`)
+- [x] Pipeline with valid input passes through all 6 gates, returns `{:ok true}`
+- [x] Pipeline with invalid input stops at the first failing gate
+- [x] Evidence shape specs validate all 6 record types (Malli, not spec.alpha — fine)
+- [x] Each gate namespace docstring cites its two coordination patterns
+- [x] Traceability: `:g3/no-psr` → `gate.pattern` → `coordination/mandatory-psr` → mission §2.3 E2
+
+**Issues found and resolved:**
+
+1. **validate.clj bug** — `shapes/validate!` result was discarded; invalid PUR
+   shapes silently passed through. Fixed: shape validation now gates the flow.
+   (commit by Claude)
+
+**Known design notes (not bugs, decisions to carry forward):**
+
+2. **Namespace is `futon3.gate.*`** — matches mission §2.1. If we decide the
+   gate code permanently lives in futon3b, rename later. Not urgent.
+3. **Duplicated pattern library** — `library/coordination/` has local copies of
+   the 12 patterns also in `futon3/library/coordination/`. The relations.clj
+   search already reads both roots. Keep futon3 as authoritative source;
+   futon3b copies are convenient for tests but should not diverge.
+4. **futon3a local dep** — `deps.edn` has `{:local/root "../futon3a"}`. Will
+   fail without futon3a checkout. Acceptable for dev; note for CI.
+5. **Tests in one file** — `pipeline_test.clj` covers all gates via the pipeline.
+   Per-gate test files can be added as gates gain complexity in Phase 2.
+
+### Tensions Addressed
+
+- E4 → **scaffold** (G5 validates task shape, mission-ref, criteria)
+- E3 → **scaffold** (6 evidence shapes defined + Malli validation at each gate)
+- E2 → **scaffold** (G3 rejects tasks without PSR or with unknown pattern)
+
+"Scaffold" = validation logic exists, doesn't yet connect to real stores.
+
+---
+
+## Phase 2: Store Integration + Gate Logic [CURRENT]
+
+**Goal:** Replace injected stubs with real store calls. Gates should read from
+and write to actual stores, and the pipeline should produce durable evidence.
+
+**Depends on:** Phase 1 verified (done)
 
 ### What to Build
 
-**1. Evidence shapes** — `src/futon3b/gate/shapes.clj`
+**1. Wire G3 to the query layer** — `src/futon3/gate/pattern.clj`
 
-Define Clojure specs (or schema maps) for the six evidence record types from
-mission §1.2:
+Currently G3 checks `(:patterns/ids patterns)` — a set passed in the input.
+Replace with a call to `futon3b.query.relations/patterns` to search the actual
+pattern library. When a PSR references a pattern-id, G3 should verify it
+exists via `(relations/search pattern-id)` or a dedicated pattern-exists?
+relation.
 
-```
-:task-spec   {:task/id, :task/mission-ref, :task/scope, :task/typed-io, :task/success-criteria, :task/intent}
-:assignment  {:assign/agent-id, :assign/task-id, :assign/capabilities, :assign/exclusive?}
-:psr         {:psr/id, :psr/task-id, :psr/pattern-ref, :psr/candidates, :psr/rationale, :psr/type}
-:artifact    {:artifact/id, :artifact/task-id, :artifact/type, :artifact/ref, :artifact/registered-at}
-:pur         {:pur/id, :pur/psr-ref, :pur/criteria-eval, :pur/outcome, :pur/prediction-error}
-:par         {:par/id, :par/session-ref, :par/what-worked, :par/what-didnt, :par/prediction-errors, :par/suggestions}
-```
+This connects Prototype 0 (search) to Phase 1 (gates) — completing the E5
+tension ("search not wired to pipeline").
 
-Use `clojure.spec.alpha` for validation. Each shape should have a `valid?`
-function and a `explain` function that returns a human-readable error.
+**2. Wire G5 to mission config** — `src/futon3/gate/task.clj`
 
-**2. Error catalog** — `src/futon3b/gate/errors.clj`
+Currently G5 checks `(get-in state [:ports :I-missions])` — a map passed in.
+For now, load missions from EDN config files (e.g. `holes/missions/*.edn` or
+a mission registry). Later this becomes XTDB-backed. The key change: G5 should
+be able to resolve a mission-ref to a real mission document and check its state.
 
-Define the gate rejection types from mission §2.2. Each error is a map:
+**3. Wire G0 to durable storage** — `src/futon3/gate/evidence.clj`
 
-```clojure
-{:error/gate   :g5          ;; which gate rejected
- :error/key    :g5/missing-mission-ref
- :error/message "Task has no mission reference"
- :error/data   {}}          ;; context for debugging
-```
+Currently G0 calls an injected `evidence/sink` function. Replace with actual
+proof-path persistence — either EDN append to a proof-path log file (simple,
+durable) or XTDB submit-tx (richer, queryable). Start with EDN append;
+XTDB can come later.
 
-Provide a constructor: `(gate-error :g5 :g5/missing-mission-ref {:task task})`.
+The proof-path file should be queryable by the search layer — add a
+`proof-patho` relation to `relations.clj` so proof paths are searchable
+like transcripts and patterns.
 
-The full error key list is in mission §2.2 (14 error types across 6 gates).
+**4. Wire G2 to real execution** — `src/futon3/gate/exec.clj`
 
-**3. Gate stubs** — one namespace per gate:
+This is the hardest gate to make concrete because "execution" depends on what
+the task is. For Phase 2, support two execution modes:
 
-```
-src/futon3b/gate/task.clj       ;; G5 — validates task shape
-src/futon3b/gate/auth.clj       ;; G4 — validates agent registration
-src/futon3b/gate/pattern.clj    ;; G3 — validates PSR exists
-src/futon3b/gate/exec.clj       ;; G2 — stub (execution logic comes in Phase 2)
-src/futon3b/gate/validate.clj   ;; G1 — validates PUR exists
-src/futon3b/gate/evidence.clj   ;; G0 — validates evidence persistence
-```
+- **Check DSL evaluation**: Wrap futon3's P2 check DSL if available. A task
+  whose `:task/type` is `:check` gets evaluated against a check spec.
+- **Pass-through**: For tasks that are "done" (e.g. documentation tasks,
+  review tasks), the exec gate just registers the artifact as-is.
 
-Each gate namespace must:
-- Have a docstring citing its two coordination patterns (from mission §2.1)
-- Export a single function: `(pass ctx)` → returns updated ctx or throws/returns gate error
-- Validate its input against the relevant evidence shape
-- Return a typed error (from errors.clj) on validation failure
+Budget enforcement (timeout via `deref` on a `future`) already works.
 
-The `ctx` map flows through the pipeline. Each gate reads what it needs from
-ctx and assoc's its output evidence record back into ctx.
+**5. Add proof-path query tests** — `test/futon3/gate/`
 
-**4. Pipeline composition** — `src/futon3b/gate/pipeline.clj`
-
-Thread a request through G5 → G4 → G3 → G2 → G1 → G0. Stop at the first
-gate that returns an error. Return either the completed ctx (with all evidence
-records) or the error (with gate attribution).
-
-```clojure
-(defn run-pipeline
-  "Run request through all six gates. Returns {:ok ctx} or {:error error}."
-  [request]
-  ...)
-```
-
-**5. Tests** — `test/futon3b/gate/`
-
-One test file per gate plus one pipeline integration test:
-
-```
-test/futon3b/gate/shapes_test.clj      ;; evidence shapes validate/reject correctly
-test/futon3b/gate/task_test.clj        ;; G5 rejects missing mission-ref, missing criteria
-test/futon3b/gate/auth_test.clj        ;; G4 rejects unregistered agent
-test/futon3b/gate/pattern_test.clj     ;; G3 rejects missing PSR
-test/futon3b/gate/validate_test.clj    ;; G1 rejects missing PUR
-test/futon3b/gate/evidence_test.clj    ;; G0 rejects unpersisted evidence
-test/futon3b/gate/pipeline_test.clj    ;; full G5→G0 valid path; first-fail short-circuit
-```
-
-Use `clojure.test`. No external dependencies needed — gates validate shapes,
-so tests just pass maps in and check what comes out.
+- Pipeline produces a proof-path file that can be read back
+- Proof-path entries are searchable via `relations/search`
+- Round-trip test: run pipeline → write proof-path → search for task-id → find it
 
 ### How to Verify
 
-Run:
 ```bash
 clj -X:test
 ```
 
-All tests must pass. Specifically verify:
-
-- [ ] Each gate rejects malformed input with a typed error from errors.clj
-- [ ] Each error carries `:error/gate` attribution
-- [ ] Pipeline with valid input passes through all 6 gates and returns `:ok`
-- [ ] Pipeline with invalid input stops at the first failing gate
-- [ ] Evidence shape specs validate all 6 record types
-- [ ] Each gate namespace docstring cites its two coordination patterns
+Additional verification:
+- [ ] G3 rejects unknown pattern-ids by checking the real pattern library
+- [ ] G5 resolves mission-ref to a real mission config file
+- [ ] G0 writes proof-path to a file that survives JVM restart
+- [ ] Proof-path file is parseable EDN with all 6 gate evidence records
+- [ ] Round-trip: pipeline → proof-path file → query layer → find the task
+- [ ] Pipeline still works with injected stubs (backward compatible)
 
 ### What NOT to Build
 
-- No real XTDB/SQLite/filesystem calls. Gates validate shapes only. Store
-  integration comes in Phase 2.
-- No HTTP endpoints. REPL-first.
-- No Level 1 (tension observer, canonicalizer). That's Phase 3.
-- Do not modify the existing query/ namespaces.
+- No XTDB write path yet (read-only for XTDB in this phase)
+- No real futon3a composition (typed arrows, chain scoring) — that's Phase 2b
+  if the basic wiring works
+- No HTTP endpoint
+- No Level 1
 
 ### Tensions Addressed
 
-When this phase is verified, these tensions move from "on paper" to "scaffold":
+When this phase is verified:
 
-- E4 (unvalidated input) → G5 validates task shape
-- E3 (untyped trails) → evidence shapes defined for all inter-gate records
-- E2 (no mandatory PSR) → G3 rejects tasks without PSR
-
-"Scaffold" means the validation logic exists but doesn't yet connect to real
-stores or real execution. Full resolution requires Phase 2.
-
-### Acceptance Checklist
-
-After Codex delivers, we verify by:
-
-1. `clj -X:test` — all tests green
-2. Read each gate namespace — docstring cites correct patterns?
-3. Read pipeline_test.clj — does it exercise both valid and invalid paths?
-4. Read shapes.clj — do the specs match mission §1.2 exactly?
-5. Read errors.clj — do the error keys match mission §2.2 exactly?
-6. Traceability spot-check: pick one error (e.g. `:g3/no-psr`), trace it
-   back: error → gate.pattern → coordination/mandatory-psr.flexiarg →
-   mission §2.3 E2 → ARGUMENT.flexiarg E2
-
-If any check fails, we note what's wrong and hand it back with specific
-corrections rather than vague feedback.
-
----
-
-## Phase 2: Store Integration + Gate Logic [PLANNED]
-
-**Goal:** Connect gates to real stores. G5 checks missions in XTDB. G3 uses
-the query layer (Prototype 0) for pattern search. G2 writes artifacts to XTDB.
-G0 persists proof paths.
-
-**Tensions addressed:** E1, E5, E7 (full resolution)
-
-**Depends on:** Phase 1 verified
-
-**Details:** To be specified when Phase 1 is verified.
+- E5 → **resolved** (search wired to G3, proof-paths queryable)
+- E1 → **partial** (patterns checked against real library; full phylogeny needs futon3a arrows)
+- E7 → **partial** (proof-paths as queryable evidence; full graph needs XTDB write path)
 
 ---
 
