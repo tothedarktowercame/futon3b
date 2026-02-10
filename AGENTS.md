@@ -20,10 +20,15 @@ src/futon3/gate/shapes.clj         — evidence shape specs (Malli)
 src/futon3/gate/errors.clj         — gate rejection catalog
 src/futon3/gate/util.clj           — ID generation, timestamps
 src/futon3/gate/default.clj        — C-default stub
+src/futon3/gate/observe.clj        — L1 tension observer
+src/futon3/gate/canon.clj          — L1 canonicalizer (Baldwin cycle)
+src/futon3/gate/level1.clj         — L1 composition (observe → canon)
+src/futon3b/bootstrap.clj          — Prototype 0: submit futon3c tasks through gates
 test/futon3/gate/pipeline_test.clj — 17 tests: gate rejection + happy path + store integration
+test/futon3/gate/level1_test.clj   — 13 tests: observer + canonicalizer + round-trip + overwrite guard
 test/futon3b/query/relations_test.clj  — query layer tests
 test/futon3b/query/transcript_test.clj — transcript search tests
-data/missions.edn                  — mission registry (loaded by G5)
+data/missions.edn                  — mission registry (M-coordination-rewrite + M-social-exotype)
 data/proof-paths/                  — durable proof-path EDN files (written by G0)
 deps.edn                           — core.logic, XTDB, SQLite, Malli, data.json
 library/coordination/              — 12 coordination pattern flexiargs (local copies)
@@ -309,6 +314,52 @@ ct/mission.clj: 8/8 checks pass
 - E6 → **resolved** (L1 glacial loop canonizes new patterns from accumulated evidence)
 - E1 → **resolved** (G3 checks real library; L1 canonizer writes new patterns from evidence)
 - E7 → **resolved** (proof paths queryable; L1 loop closes evidence→library feedback)
+
+---
+
+## Phase 4: Bootstrap Closure (M-social-exotype Part III) [DONE]
+
+**Goal:** Submit futon3c development tasks through the futon3b gate pipeline,
+producing durable proof-paths. This is the bootstrap closure from M-f6-recursive:
+the pipeline that validates futon work was itself built by the pipeline it validates.
+
+**Built by:** Claude
+**Depends on:** Phase 3 verified (done)
+
+### What Was Built
+
+**1. Mission registration** — `data/missions.edn`
+
+Added `M-social-exotype` as `:active` with three phases (`:part-1`, `:part-2`,
+`:part-3`). G5 now accepts tasks referencing this mission.
+
+**2. REPL helper** — `src/futon3b/bootstrap.clj` (NEW)
+
+Thin namespace that constructs valid pipeline inputs for futon3c development tasks.
+Three pre-built submissions:
+
+- `submit-part-i!` — retrospective proof-path for social-exotype.edn (Part I done)
+- `submit-part-ii!` — proof-path for parallel composition (Part II with Codex)
+- `submit-part-iii!` — self-referential bootstrap (this very submission)
+
+Also provides `submit!` for ad-hoc task submission with sensible defaults
+(auto-generated IDs, gap PSR, passthrough artifact for non-executable tasks).
+
+### Verification Results
+
+```
+30 tests, 107 assertions, 0 failures, 0 errors
+3 proof-paths persisted in data/proof-paths/
+```
+
+**Acceptance checklist:**
+
+- [x] M-social-exotype registered in futon3b mission store
+- [x] REPL helper submits tasks and receives proof-paths
+- [x] All 3 proof-paths contain 6 typed evidence records (TaskSpec, Assignment, PSR, Artifact, PUR, PAR)
+- [x] All 3 proof-paths reference `M-social-exotype` as mission-ref
+- [x] Existing 30 tests still pass (no regressions)
+- [x] Bootstrap closure works: futon3c task governed by futon3b infrastructure
 
 ---
 

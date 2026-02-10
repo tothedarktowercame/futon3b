@@ -8,4 +8,12 @@
   :mission/title "Coordination Rewrite"
   :mission/doc "holes/missions/M-coordination-rewrite.md"
   :mission/phases [:phase-0 :phase-1 :phase-2 :phase-3]
-  :mission/current-phase :phase-2}}
+  :mission/current-phase :phase-2}
+
+ "M-social-exotype"
+ {:mission/id "M-social-exotype"
+  :mission/state :active
+  :mission/title "Social Exotype"
+  :mission/doc "futon3c/holes/missions/M-social-exotype.md"
+  :mission/phases [:part-1 :part-2 :part-3]
+  :mission/current-phase :part-3}}
