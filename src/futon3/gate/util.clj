@@ -1,4 +1,5 @@
 (ns futon3.gate.util
+  "Utility functions for the gate pipeline: ID generation, timestamps, string checks."
   (:require [clojure.string :as str])
   (:import (java.time Instant)
            (java.util UUID)))
