@@ -16,7 +16,11 @@
             [clojure.java.io :as io]
             [clojure.string :as str]
             [futon3.gate.shapes :as shapes]
-            [futon3b.query.transcript :as transcript]))
+            [futon3b.query.transcript :as transcript]
+            [meme.schema :as meme-schema]
+            [meme.core :as meme-core]
+            [next.jdbc :as jdbc]
+            [next.jdbc.result-set :as rs]))
 
 ;;; ============================================================
 ;;; Configuration
@@ -257,6 +261,43 @@
            a'))))))
 
 ;;; ============================================================
+;;; Core.logic Relations: Meme Store
+;;; ============================================================
+
+(defn- meme-ds
+  "Get the meme store datasource. Returns nil if meme.db doesn't exist."
+  []
+  (let [path (meme-schema/db-path)]
+    (when (.exists (io/file path))
+      (meme-schema/datasource path))))
+
+(defn memeo
+  "Relate entity-id and entity-meta for meme store entities matching query-str.
+   query-str must be a ground string. Searches entity name and description."
+  [entity-id entity-meta query-str]
+  (fn [a]
+    (if-not (string? query-str)
+      () ;; fail: query-str must be ground
+      (if-let [ds (meme-ds)]
+        (let [like-pat (str "%" query-str "%")
+              results (jdbc/execute! ds
+                        ["SELECT * FROM entities WHERE name LIKE ? OR description LIKE ?"
+                         like-pat like-pat]
+                        {:builder-fn rs/as-unqualified-maps})]
+          (l/to-stream
+           (for [r results
+                 :let [meta {:name (:name r)
+                             :kind (:kind r)
+                             :description (:description r)
+                             :id (:id r)}
+                       a' (-> a
+                              (l/unify entity-id (:id r))
+                              (l/unify entity-meta meta))]
+                 :when a']
+             a')))
+        ()))))
+
+;;; ============================================================
 ;;; Federated Search
 ;;; ============================================================
 
@@ -276,7 +317,10 @@
       (patterno meta)
       (l/project [meta]
         (l/== match meta)
-        (l/== entity-id (:pattern-id meta))))]))
+        (l/== entity-id (:pattern-id meta))))]
+   ;; Search meme store
+   [(l/== source :meme)
+    (memeo entity-id match query-str)]))
 
 ;;; ============================================================
 ;;; Convenience: run queries and return Clojure data
@@ -302,8 +346,23 @@
               (map (fn [p] {:source :pattern
                             :id (:pattern-id p)
                             :match (select-keys p [:directory :file
-                                                   :pattern-id])})))]
-     (take limit (concat transcript-results pattern-results)))))
+                                                   :pattern-id])})))
+         meme-results
+         (when-let [ds (meme-ds)]
+           (let [like-pat (str "%" query-str "%")]
+             (->> (jdbc/execute! ds
+                    ["SELECT * FROM entities WHERE name LIKE ? OR description LIKE ?"
+                     like-pat like-pat]
+                    {:builder-fn rs/as-unqualified-maps})
+                  (map (fn [e] {:source :meme
+                                :id (:id e)
+                                :match (select-keys e [:name :kind :description])})))))]
+     ;; Fair share from each source to avoid one dominating
+     (let [per-source (max 1 (quot limit 3))
+           remainder (- limit (* 3 per-source))]
+       (concat (take (+ per-source remainder) pattern-results)
+               (take per-source meme-results)
+               (take per-source transcript-results))))))
 
 (defn sessions
   "List all known sessions. Returns seq of metadata maps."
