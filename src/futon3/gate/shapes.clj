@@ -28,7 +28,16 @@
    [:psr/task-id [:string {:min 1}]]
    [:psr/type [:enum :selection :gap]]
    [:psr/pattern-ref {:optional true} [:maybe [:string {:min 1}]]]
-   [:psr/candidates {:optional true} [:vector map?]]
+   ;; Candidates were `[:vector map?]`, which validates nothing beyond
+   ;; map-ness: every key spelling passes. The system's own writer uses
+   ;; {:pattern-id ... :event ...} (real_backend.clj gap-psr), but a runner
+   ;; on 2026-08-04 wrote {:pattern/id ...} and it was accepted, so the field
+   ;; silently accumulated two incompatible spellings that no consumer reads.
+   ;; Naming the key also lets malli's humanize REPORT it: the same runner
+   ;; could fix "must be a map" but had to guess the key, turning a one-shot
+   ;; repair into guess-and-check. Open map, so extra keys still pass.
+   [:psr/candidates {:optional true}
+    [:vector [:map [:pattern-id [:string {:min 1}]]]]]
    [:psr/rationale {:optional true} [:maybe [:string {:min 1}]]]])
 
 (def Artifact
