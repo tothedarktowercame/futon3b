@@ -28,16 +28,16 @@
    [:psr/task-id [:string {:min 1}]]
    [:psr/type [:enum :selection :gap]]
    [:psr/pattern-ref {:optional true} [:maybe [:string {:min 1}]]]
-   ;; Candidates were `[:vector map?]`, which validates nothing beyond
-   ;; map-ness: every key spelling passes. The system's own writer uses
-   ;; {:pattern-id ... :event ...} (real_backend.clj gap-psr), but a runner
-   ;; on 2026-08-04 wrote {:pattern/id ...} and it was accepted, so the field
-   ;; silently accumulated two incompatible spellings that no consumer reads.
-   ;; Naming the key also lets malli's humanize REPORT it: the same runner
-   ;; could fix "must be a map" but had to guess the key, turning a one-shot
-   ;; repair into guess-and-check. Open map, so extra keys still pass.
-   [:psr/candidates {:optional true}
-    [:vector [:map [:pattern-id [:string {:min 1}]]]]]
+   ;; REVERTED to permissive 2026-08-04. Tightening this to
+   ;; [:vector [:map [:pattern-id ...]]] was correct in spirit -- `map?`
+   ;; validates nothing, and the house writer uses :pattern-id while a runner
+   ;; wrote :pattern/id -- but it BROKE A LIVE SYSTEM. Agents hold PSRs in
+   ;; discipline-state that were validated under the old schema; pur-update
+   ;; replays that PSR into the proof path at :g3, where the tightened schema
+   ;; rejected it. A write-time schema tightening retroactively invalidates
+   ;; in-flight state that is re-validated later. Re-tighten only with a
+   ;; migration for held state, not mid-session.
+   [:psr/candidates {:optional true} [:vector map?]]
    [:psr/rationale {:optional true} [:maybe [:string {:min 1}]]]])
 
 (def Artifact
