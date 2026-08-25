@@ -28,15 +28,6 @@
    [:psr/task-id [:string {:min 1}]]
    [:psr/type [:enum :selection :gap]]
    [:psr/pattern-ref {:optional true} [:maybe [:string {:min 1}]]]
-   ;; REVERTED to permissive 2026-08-04. Tightening this to
-   ;; [:vector [:map [:pattern-id ...]]] was correct in spirit -- `map?`
-   ;; validates nothing, and the house writer uses :pattern-id while a runner
-   ;; wrote :pattern/id -- but it BROKE A LIVE SYSTEM. Agents hold PSRs in
-   ;; discipline-state that were validated under the old schema; pur-update
-   ;; replays that PSR into the proof path at :g3, where the tightened schema
-   ;; rejected it. A write-time schema tightening retroactively invalidates
-   ;; in-flight state that is re-validated later. Re-tighten only with a
-   ;; migration for held state, not mid-session.
    [:psr/candidates {:optional true} [:vector map?]]
    [:psr/rationale {:optional true} [:maybe [:string {:min 1}]]]])
 
@@ -106,80 +97,11 @@
    [:path/id [:string {:min 1}]]
    [:events [:vector ProofPathEvent]]])
 
-;; The primary record written at each gate. Every gate also admits a
-;; GateRejection, identified by {:type :gate/reject}; see
-;; `record-schema-for-event`. This map is intentionally diagnostic metadata:
-;; ProofPathEvent retains its existing union, so this change does not reject
-;; any gate/record pairing that was previously accepted.
-(def gate-record-types
-  {:g5 {:record-type :TaskSpec :schema TaskSpec}
-   :g4 {:record-type :Assignment :schema Assignment}
-   :g3 {:record-type :PSR :schema PSR}
-   :g2 {:record-type :Artifact :schema Artifact}
-   :g1 {:record-type :PUR :schema PUR}
-   :g0 {:record-type :PAR :schema PAR}
-   :l1-observe {:record-type :TensionObservation :schema TensionObservation}
-   :l1-canon {:record-type :CanonizationEvent :schema CanonizationEvent}})
-
-(defn- record-schema-for-event
-  [{:gate/keys [id record]}]
-  (if (= :gate/reject (:type record))
-    {:record-type :GateRejection :schema GateRejection}
-    (get gate-record-types id)))
-
-(defn- schema-name
-  [schema]
-  (cond
-    (= schema TaskSpec) :TaskSpec
-    (= schema Assignment) :Assignment
-    (= schema PSR) :PSR
-    (= schema Artifact) :Artifact
-    (= schema PUR) :PUR
-    (= schema PAR) :PAR
-    (= schema TensionObservation) :TensionObservation
-    (= schema CanonizationEvent) :CanonizationEvent
-    (= schema GateRejection) :GateRejection
-    (= schema ProofPathEvent) :ProofPathEvent
-    (= schema ProofPath) :ProofPath
-    :else :unknown))
-
-(defn- schema-error
-  [schema value]
-  {:schema (schema-name schema)
-   :details (me/humanize (m/explain schema value))
-   :value value})
-
-(defn- event-error
-  [event]
-  (if-let [{:keys [record-type schema]} (record-schema-for-event event)]
-    (if-not (m/validate schema (:gate/record event))
-      (assoc (schema-error schema (:gate/record event))
-             :gate/id (:gate/id event)
-             :record-type record-type)
-      (schema-error ProofPathEvent event))
-    (schema-error ProofPathEvent event)))
-
-(defn- proof-path-error
-  [proof-path]
-  (if (vector? (:events proof-path))
-    (if-let [[event-index event]
-             (first (keep-indexed
-                     (fn [idx candidate]
-                       (when-not (m/validate ProofPathEvent candidate)
-                         [idx candidate]))
-                     (:events proof-path)))]
-      (assoc (event-error event) :event-index event-index)
-      (schema-error ProofPath proof-path))
-    (schema-error ProofPath proof-path)))
-
 (defn validate!
   "Validate VALUE against SCHEMA, returning VALUE or throwing ex-info."
   [schema value]
   (if (m/validate schema value)
     value
-    (let [error-data (cond
-                       (= schema ProofPath) (proof-path-error value)
-                       (= schema ProofPathEvent) (event-error value)
-                       :else (schema-error schema value))]
-      (throw (ex-info (str "Invalid " (name (:schema error-data)) " evidence shape")
-                      error-data)))))
+    (throw (ex-info "Invalid evidence shape"
+                    {:details (me/humanize (m/explain schema value))
+                     :value value}))))
